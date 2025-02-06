@@ -1,6 +1,5 @@
 import type { LoginStatusResult } from '../types';
 
-import { createGUID } from '../lib/utils.js';
 import { conf, urlAccountBase } from '../lib/store.js';
 
 let account = conf.get('account');
@@ -8,7 +7,7 @@ let account = conf.get('account');
 const to = (fn:(()=>any)|undefined,ms:number=1000) : Promise<void> => new Promise(ok => setTimeout(async () => {await fn?.();ok()}, ms));
 
 export async function login() {
-	const id = createGUID();
+	const id = crypto.randomUUID();
 
 	async function check() : Promise<LoginStatusResult> { return new Promise(async (ok, err) => { do {
 		const resp = await fetch(`${urlAccountBase}/api/cli/${id}/status`).then(r => r?.ok && r.status == 200 ? r.json() : {status:'error'}) as LoginStatusResult;

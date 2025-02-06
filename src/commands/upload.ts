@@ -16,6 +16,8 @@ const NUM_UPLOAD_TRIES: number = 3;
 
 const account = conf.get('account') as UserToken;
 
+// Talk with the Micrio dashboard CLI API (dash.micr.io/api/cli/*)
+// See github.com:Q42/Micrio/server/dash.micr.io for the server code
 const api = <T>(agent: https.Agent, path:string, data:Object) : Promise<T|undefined> => new Promise((ok, err) => {
 	const url = new URL(urlDashBase+path);
 	const blob = JSON.stringify(data);
@@ -52,6 +54,7 @@ const api = <T>(agent: https.Agent, path:string, data:Object) : Promise<T|undefi
 const error = (str:string) : void => console.log('Error: ' + str);
 const sanitize = (f:string, outDir:string) : string => f.replace(/\\+/g,'/').replace(outDir+'/','');
 
+// Process all images and upload them to Micrio
 export async function upload(ignore:any, opts:{
 	destination: string;
 	format: FormatType;
@@ -74,6 +77,9 @@ export async function upload(ignore:any, opts:{
 
 	const start = Date.now();
 
+	// You can provide a wildcard in the input files, HOWEVER, it will only seek these files from
+	// the CURRENT working directory.
+	// TODO: Fix this to also be able to provide a wildcard of other directories
 	const allFiles = fs.readdirSync('.').filter(f => !fs.lstatSync(f).isDirectory());
 	let files = o.args.map(f => {
 		if(!/\*/.test(f)) return [f]
@@ -123,6 +129,7 @@ export async function upload(ignore:any, opts:{
 		if(queue.length >= threads) await Promise.any(queue);
 		const f = files[i];
 		log(`Processing ${i+1} / ${files.length}...`, 0);
+		// Function `handle` does the image tiling and adding the resulting tiles to the Uploader queue
 		hQueue[f] = handle(uploader, f, outDir, folder, opts.format, opts.type, i, files.length, omni?.id).then((r) => {
 			delete hQueue[f];
 			if(opts.type == 'omni' && !omni.id) {
@@ -141,11 +148,18 @@ export async function upload(ignore:any, opts:{
 		return error(e?.['message']??e??'An unknown error occurred');
 	}
 
+	// Wait for all images to finish processing
 	await Promise.all(Object.values(hQueue));
 	if(origImageNum) console.log();
+
+	// Wait until the Uploader has finished all of its individual upload threads
 	await uploader.complete();
 	console.log();
 
+	// In case of an omni object, create the pregenerated optimized viewing package
+	// which contains thumbnails of each individual frame
+	// TODO this code can be optimized, for instance using the Uploader instead of
+	// a `fetch()` call.
 	if(omni.id && omni.width && omni.height) {
 		const baseBinDir = path.join(outDir, omni.id+'_basebin');
 		console.log('Creating optimized viewing package...');
@@ -172,6 +186,8 @@ export async function upload(ignore:any, opts:{
 			path: t.replace(/\\/g,'/').replace(/^.*_basebin\//,''),
 			buffer: fs.readFileSync(t)
 		}));
+
+		// TODO use Uploader for this logic because it's doubled code here
 		const binPath = `${omni.id}/base.bin`;
 		const postUri = await api<R2StoreResult>(httpAgent, `/api/${url.pathname.split('/')[1]}/store`, {
 			files: [binPath]
@@ -184,10 +200,13 @@ export async function upload(ignore:any, opts:{
 			body: generateMDP(tiles),
 			headers: { 'Content-Type': 'application/octet-stream' }
 		});
+		// Tell Micrio that the omni object is really done
 		await api(uploader.agent, `/api/cli${folder}/@${omni.id}/status`, { status: 4 });
 	}
 
 	console.log('Finalizing...');
+
+	// Remove the entire original directory containing all tile results
 	fs.rmSync(outDir, {recursive: true, force: true});
 
 	log(`${origImageNum ? 'Succesfully a' : 'A'}dded ${opts.type == 'omni' ? `a 360 object image (${origImageNum} frames)` : `${origImageNum} file${origImageNum==1?'':'s'}`} in ${Math.round(Date.now()-start)/1000}s.`, 0);
@@ -196,23 +215,32 @@ export async function upload(ignore:any, opts:{
 	process.exit(1);
 }
 
+// Walk through a directory and all of its recursive subdirectories and return all files in it
 const walkSync = (dir:string, callback:(s:string)=>void) : void => fs.lstatSync(dir).isDirectory()
 	? fs.readdirSync(dir).forEach(f => walkSync(path.join(dir, f), callback))
 	: callback(dir);
 
 const pdfPageRx = /^(.*\.pdf)\.(\d+)\.(png|tif)$/;
 
+// This function does the actual image tiling using Sharp (libvips)
 const tile = (destDir: string, file:string, format:FormatType) : Promise<TileResult> => new Promise((ok, err) => {
 	sharp(file, {
+		// Manual hard limit at 100,000 x 100,000 px
 		limitInputPixels: 1E5 * 1E5,
+		// By default, sharp has a low limit
 		unlimited: true
 	}).toFormat(format, {
+		// Default is WebP, and 75 is OK, otherwise it's JPG
 		quality: format == 'webp' ? 75 : 85
 	}).tile({
+		// Tile size
 		size: 1024,
+		// Micrio doesn't require an extra padded pixel
 		overlap: 0,
 		depth: 'onepixel',
 		container: 'fs',
+		// This command makes the image into a deepzoom tile pyramid
+		// The output of this operation will result in a directory with all zoom levels and tiles
 		layout: 'dz'
 	}).toFile(destDir, (error:any, info?:TileResult) => {
 		if(error||!info) err(error??'Could not tile image');
@@ -249,23 +277,33 @@ async function handle(
 	const {width, height} = await tile(baseDir, f, format);
 	if(!height || !width) throw new Error('Could not read image dimensions');
 
+	// If this is an extracted PNG file out of an original PDF file, we no longer need it
 	if(isPdfPage) fs.rmSync(f);
 
+	// Sharp (libvips) always puts the tiles in `name_files` -- rename to our standard
 	fs.renameSync(baseDir+'_files', baseDir);
+	// Delete libvips output meta data file, not needed
 	fs.rmSync(path.join(baseDir, 'vips-properties.xml'));
 
-	// Update status
+	// Update status to Micrio
+	// `omniId` is only defined for the SECOND and later frames of an omni object
+	// So the first frame of an omni object will do this call.
 	if(!omniId) await api(uploader.agent, `/api/cli${folder}/@${res.id}/status`, {
 		width, height, status: 6, format, length: total
 	});
 
+	// Get all tiles from all subfolders of the output directory
 	const tiles:string[] = [];
 	walkSync(baseDir, t => tiles.push(t));
 	uploader.add(tiles);
 
-	// Finalize
+	// Add a final Uploader job to set the Micrio image status to Completed (4)
+	// TODO: It's possible that this function is called if there are still ongoing tile uploads
+	// of this image. Fix this by adding a separate `oncomplete` trigger in Uploader for this individual
+	// tiled image, which should trigger this.
 	if(type != 'omni') uploader.add([() => api(uploader.agent, `/api/cli${folder}/@${res.id}/status`, { status: 4 })]);
 
+	// Remove the libvips-generated deepzoom meta file
 	fs.rmSync(baseDir+'.dzi');
 
 	return { id: res.id, width, height };
@@ -317,6 +355,9 @@ class Uploader {
 		this.outDir = sanitize(outDir, outDir);
 	}
 
+	// This is called for each individual resulting tile of an image operation
+	// Or the final function to send the succesful status to Micrio after all tiles
+	// of an image have been uploaded.
 	add(jobs:JobType[]) {
 		this.jobs.push(...jobs);
 		this.nextBatch();
@@ -345,11 +386,13 @@ class Uploader {
 		return this.uris[f] as string;
 	}
 
+	// This makes sure all upload threads are always filled
 	private nextBatch() {
 		let r = UPLOAD_THREADS - this.running.size;
 		while(--r > 0) this.next();
 	}
 
+	// Do the next upload thread
 	private async next() {
 		if(this.running.size >= UPLOAD_THREADS) return;
 		const job = this.jobs.shift();

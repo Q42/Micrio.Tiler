@@ -4,6 +4,8 @@
 
 ## Quick Start
 
+*IMPORTANT*: Make sure your system is using node version `20.13.1`. Use `nvm` to switch if necessary.
+
 1. Install the Micrio tool as a global binary
 
 	```bash

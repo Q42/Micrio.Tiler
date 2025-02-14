@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+	font-weight: 500;
+
+	color-scheme: dark;
+	color: rgba(255, 255, 255, 0.87);
+	background-color: #242424;
+
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+body {
+	margin: 0;
+	display: flex;
+	place-items: center;
+	min-width: 320px;
+	min-height: 100vh;
+}
+
+h1 {
+	font-size: 3.2em;
+	line-height: 1.1;
+}
+
+#app {
+	max-width: 1280px;
+	margin: 0 auto;
+	padding: 2rem;
+	text-align: center;
+}
+
+/* Dynamic logo */
+#logo span {
+	transition: transform 0s ease;
+	transform: scale(0);
+}
+#logo span:not([data-step="0"]) {
+	transition-duration: .8s;
+	z-index: 6;
+}
+#logo span[data-step="1"] {
+	transform: scale(.4);
+	z-index: 5;
+}
+#logo span:nth-child(odd)[data-step="1"] {
+	transform: scale(.5);
+}
+#logo span[data-step="2"] {
+	transform: scale(.78);
+	z-index: 4;
+}
+#logo span[data-step="3"] {
+	transform: scale(1);
+	z-index: 3;
+}
+#logo span:nth-child(even)[data-step="3"] {
+	transition-duration: .4s;
+}
+#logo span[data-step="4"] {
+	transform: scale(1);
+	transition-duration: .6s;
+	z-index: 2;
+}
+#logo span:nth-child(even)[data-step="4"] {
+	transform: scale(.99);
+}
+#logo span[data-step="5"] {
+	transform: scale(1);
+	transition-duration: 0s;
+	z-index: 1;
+}
+
+svg.svelte-fa.spinning {
+	animation: spin 2s infinite linear;
+}
+
+@keyframes spin {
+	from { transform: rotateZ(0deg); }
+	to { transform: rotateZ(360deg); }
+}

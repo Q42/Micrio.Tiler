@@ -1,0 +1,53 @@
+{
+	"name": "micrio-gui",
+	"version": "0.0.2",
+	"description": "Graphical User Interface for processing and uploading images to Micrio",
+	"main": "dist/main.js",
+	"scripts": {
+		"start": "tsc && electron-forge start",
+		"package": "electron-forge package",
+		"make": "electron-forge make",
+		"install-sharp": "node sharp-install.js"
+	},
+	"author": "Marcel Duin <marcel@micr.io>",
+	"keywords": [
+		"micrio",
+		"gui"
+	],
+	"bugs": {
+		"url": "https://github.com/marcelduin/Micrio.GUI"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/marcelduin/Micrio.GUI.git"
+	},
+	"engines": {
+		"node": ">=18.17.0"
+	},
+	"homepage": "https://micr.io/",
+	"license": "MIT OR Apache-2.0",
+	"devDependencies": {
+		"@electron-forge/cli": "^7.4.0",
+		"@electron-forge/maker-deb": "^7.4.0",
+		"@electron-forge/maker-rpm": "^7.4.0",
+		"@electron-forge/maker-squirrel": "^7.4.0",
+		"@electron-forge/maker-zip": "^7.4.0",
+		"@electron-forge/plugin-auto-unpack-natives": "^7.4.0",
+		"@electron-forge/plugin-fuses": "^7.4.0",
+		"@electron/fuses": "^1.8.0",
+		"electron": "^30.0.1",
+		"ts-node": "^10.9.2",
+		"typescript": "^5.4.5"
+	},
+	"dependencies": {
+		"electron-squirrel-startup": "^1.0.0",
+		"sharp": "^0.33.5"
+	},
+	"build": {
+		"asar": true,
+		"asarUnpack": [
+			"**/node_modules/sharp/**/*",
+			"**/node_modules/@img/**/*"
+		]
+	}
+}

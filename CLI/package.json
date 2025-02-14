@@ -15,11 +15,11 @@
 		"cli"
 	],
 	"bugs": {
-		"url": "https://github.com/Q42/Micrio.CLI"
+		"url": "https://github.com/Q42/Micrio.Tiler"
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/Q42/Micrio.CLI.git"
+		"url": "https://github.com/Q42/Micrio.Tiler.git"
 	},
 	"engines": {
 		"node": ">=18.17.0"

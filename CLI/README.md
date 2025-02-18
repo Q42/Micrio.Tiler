@@ -54,7 +54,3 @@ For the latest documentation, [click here](https://doc.micr.io/dashboard/v3/cli-
 ## Developing
 
 *IMPORTANT*: When developing, make sure your system is using node version `20.13.1`. Use `nvm` to switch if necessary.
-
-## Acknowledgements
-
-* [Erwin Verbruggen](https://github.com/verwinv) for rigorous testing

@@ -2,8 +2,6 @@
 
 This package deals with all tiling logic used by the Micrio CLI and GUI tools.
 
-## Publishing
+## Acknowledgements
 
-```bash
-npm publish ./dist --access public --no-git-checks --otp {code}
-```
+* [Erwin Verbruggen](https://github.com/verwinv) for rigorous testing

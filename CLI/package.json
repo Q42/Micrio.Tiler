@@ -8,7 +8,7 @@
 	},
 	"scripts": {
 		"prebuild": "node -p \"'export const LIB_VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > src/lib/version.ts",
-		"build": "npx tsc"
+		"build": "tsc"
 	},
 	"keywords": [
 		"micrio",
@@ -26,16 +26,14 @@
 	},
 	"engineStrict": true,
 	"homepage": "https://micr.io/",
-	"license": "MIT OR Apache-2.0",
+	"license": "MIT",
 	"author": "Marcel Duin <marcel@micr.io>",
 	"dependencies": {
+		"@micrio/tiler-base": "^0.1.4",
 		"commander": "^11.1.0",
-		"conf": "^12.0.0",
-		"pdf-img-convert": "^1.2.1",
-		"sharp": "^0.33.2"
+		"conf": "^12.0.0"
 	},
 	"devDependencies": {
-		"@types/node": "^20.10.5",
-		"typescript": "^5.3.3"
+		"@types/node": "^20.10.5"
 	}
 }

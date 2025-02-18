@@ -1,4 +1,4 @@
-import type { LoginStatusResult } from '../types';
+import type { LoginStatusResult } from '@micrio/tiler-base';
 
 import { conf, urlAccountBase } from '../lib/store.js';
 

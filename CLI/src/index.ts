@@ -1,10 +1,9 @@
 #! /usr/bin/env node
 
-import type{ UserToken } from './types';
+import { type UserToken, upload } from '@micrio/tiler-base';
 
 import { program, Option } from 'commander';
 import { conf } from './lib/store.js';
-import { upload } from './commands/upload.js';
 import process from 'process';
 import { LIB_VERSION } from './lib/version.js';
 import { login } from './commands/login.js';
@@ -51,6 +50,6 @@ program.command('upload')
 	.addOption(new Option('-f, --format <format>', 'tile format').choices(['webp', 'jpg']).default('webp'))
 	.addOption(new Option('-t, --type <type>', 'image type').choices(['2d', '360', 'omni']).default('2d'))
 	.addOption(new Option('--pdfScale <scale>', 'PDF scale').default('4'))
-	.action(upload);
+	.action((a,b,c) => upload(account, b, c));
 
 program.parse();

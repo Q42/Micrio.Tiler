@@ -8,11 +8,7 @@ It uses the Micrio APIs to allow you to tile your images on your own hardware, a
 
 It uses the [`sharp`](https://www.npmjs.com/package/sharp) NPM package for image processing, which uses [libvips](https://www.libvips.org/).
 
-For (experimental) PDF support, [`pdf-img-convert`](https://www.npmjs.com/package/pdf-img-convert) is used.
-
-## Developing
-
-*IMPORTANT*: When developing, make sure your system is using node version `20.13.1`. Use `nvm` to switch if necessary.
+For (experimental) PDF support, Mozilla's [`PDFjs`](https://www.npmjs.com/package/pdfjs-dist) and [`canvas`](https://www.npmjs.com/package/canvas) are used.
 
 ## Acknowledgements
 

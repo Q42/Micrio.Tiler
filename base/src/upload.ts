@@ -5,7 +5,8 @@ import os from 'os';
 import path from 'path';
 import sharp from 'sharp';
 import https from 'https';
-//import pdf2img from 'pdf-img-convert';
+
+import { parsePDF, PDFConvertOptions } from './pdf';
 
 const SIGNED_URIS = 480;
 const UPLOAD_THREADS = 100;
@@ -109,19 +110,22 @@ export async function upload(
 
 	let hasPdf:boolean = false;
 
+	const config:PDFConvertOptions = {
+		scale: parseInt(opts.pdfScale||'1'),
+		//page_numbers: [1]
+	}
+
 	// PDF parser
-	/*
 	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.endsWith('.pdf')) {
 		state?.log(`Parsing PDF file ${f}...`);
 		hasPdf = true;
-		await pdf2img.convert(f, {scale: parseInt(opts.pdfScale||'4')}).then(pages => pages.forEach((p,j) => {
+		await parsePDF(f, config).then(pages => pages.forEach((p,j) => {
 			const fName = `${f}.${(j+1).toString().padStart(4, '0')}.png`;
 			fs.writeFileSync(fName, p);
 			files.push(fName);
 		}), e => {throw new Error(`PDF reading error: ${e.toString()}`)});
 		files.splice(i--, 1);
 	}}
-	*/
 
 	const uploader = new Uploader(httpAgent, folder, opts.format, outDir);
 
@@ -152,7 +156,7 @@ export async function upload(
 			else delete hQueue[f];
 		});
 	} catch(e) {
-		/** @ts-ignore */
+		// @ts-ignore
 		throw new Error(e?.['message']??e??'An unknown error occurred');
 	}
 

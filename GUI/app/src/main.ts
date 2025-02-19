@@ -107,13 +107,16 @@ app.whenReady().then(() => {
 				pdfScale: '4'
 			},{
 				account: conf.get('account') as UserToken,
-				log: terminal.log,
+				log: (a, b) => terminal.log(a,b),
 				job: state.job,
 				update: updateState
 			}
 		).then(
-			() => updateState(state.job!.status = 'complete'),
-			e => updateState(state.error = 'Error: ' + (e?.message ?? 'Unknown error'))
+			() => updateState(state.job.status = 'complete'),
+			e => {
+				console.error(e);
+				updateState(state.error = 'Error: ' + (e?.message ?? 'Unknown error'));
+			}
 		)
 	});
 	ipcMain.on('reset', () => {

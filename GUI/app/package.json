@@ -1,6 +1,6 @@
 {
 	"name": "micrio-gui",
-	"version": "0.0.2",
+	"version": "0.1.0",
 	"description": "Graphical User Interface for processing and uploading images to Micrio",
 	"main": "dist/main.js",
 	"scripts": {
@@ -40,7 +40,7 @@
 		"typescript": "^5.4.5"
 	},
 	"dependencies": {
-		"@micrio/tiler-base": "^0.1.7",
+		"@micrio/tiler-base": "^0.1.11",
 		"electron-squirrel-startup": "^1.0.0",
 		"sharp": "^0.33.5"
 	},

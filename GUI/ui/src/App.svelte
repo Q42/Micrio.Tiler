@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { state, notifications, notify } from './lib/state';
-	import { formatBytes, formatDuration } from '../../../../../lib/shared/utils';
+	import { formatBytes, formatDuration } from './lib/utils';
 	import { API } from './lib/api';
 	//import Dev from './dev';
 

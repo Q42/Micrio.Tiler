@@ -1,6 +1,6 @@
 {
 	"name": "@micrio/tiler-base",
-	"version": "0.1.8",
+	"version": "0.1.11",
 	"description": "The base Micrio client-side tiler package used by the Micrio CLI and GUI tools",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",

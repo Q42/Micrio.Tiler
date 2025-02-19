@@ -153,7 +153,7 @@ export async function upload(
 		});
 	} catch(e) {
 		/** @ts-ignore */
-		return error(e?.['message']??e??'An unknown error occurred');
+		throw new Error(e?.['message']??e??'An unknown error occurred');
 	}
 
 	// Wait for all images to finish processing
@@ -219,8 +219,6 @@ export async function upload(
 
 	setStatus(`${origImageNum ? 'Succesfully a' : 'A'}dded ${opts.type == 'omni' ? `a 360 object image (${origImageNum} frames)` : `${origImageNum} file${origImageNum==1?'':'s'}`} in ${Math.round(Date.now()-start)/1000}s.`, true);
 	state?.log();
-
-	process.exit(1);
 }
 
 // Walk through a directory and all of its recursive subdirectories and return all files in it
@@ -232,7 +230,9 @@ const pdfPageRx = /^(.*\.pdf)\.(\d+)\.(png|tif)$/;
 
 // This function does the actual image tiling using Sharp (libvips)
 const tile = (destDir: string, file:string, format:FormatType) : Promise<TileResult> => new Promise((ok, err) => {
-	sharp(file, {
+	const blob = fs.readFileSync(file);
+	if(state?.job) state.job.bytesSource += blob.byteLength;
+	sharp(blob, {
 		// Manual hard limit at 100,000 x 100,000 px
 		limitInputPixels: 1E5 * 1E5,
 		// By default, sharp has a low limit
@@ -272,7 +272,7 @@ async function handle(
 
 	if(!fs.existsSync(f)) throw new Error(`File '${f}' not found`);
 
-	const fName = isPdfPage ? f.replace(/\.(tif|png)$/,'') : f;
+	const fName = isPdfPage ? f.replace(/\.(tif|png)$/,'') : path.basename(f);
 
 	const res = omniId ? {id: omniId} : await api<{id:string}>(uploader.agent, `/api/cli${folder}/create`,{
 		name: encodeURIComponent(fName), type, format
@@ -360,6 +360,7 @@ class Uploader {
 	// of an image have been uploaded.
 	add(jobs:JobType[]) {
 		this.jobs.push(...jobs);
+		if(state?.job) state?.update?.(state.job.numUploads += jobs.length);
 		this.nextBatch();
 	}
 
@@ -409,6 +410,7 @@ class Uploader {
 			this.running.delete(job)
 			if(typeof job == 'string') delete this.uris[job];
 			const remaining = this.jobs.length+this.running.size
+			if(state?.job) state.update?.(state.job.numUploaded = state.job.numUploads - remaining);
 			if(this.oncomplete) state?.log(`Remaining uploads: ${remaining}...`, true);
 			if(this.jobs.length) this.nextBatch();
 			else if(!remaining) this.oncomplete?.();
@@ -418,6 +420,7 @@ class Uploader {
 	private async upload(_url:string, path:string) : Promise<void> { return new Promise((ok, err) => {
 		const url = new URL(_url);
 		const blob = fs.readFileSync(path);
+		if(state?.job) state.job.bytesResult += blob.byteLength;
 		const req = https.request({
 			host: url.host,
 			path: url.pathname+url.search,

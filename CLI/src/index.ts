@@ -1,12 +1,11 @@
 #! /usr/bin/env node
 
-import { type UserToken, upload } from '@micrio/tiler-base';
+import { type UserToken, upload, login } from '@micrio/tiler-base';
 
 import { program, Option } from 'commander';
 import { conf } from './lib/store.js';
 import process from 'process';
 import { LIB_VERSION } from './lib/version.js';
-import { login } from './commands/login.js';
 import { log } from './lib/log.js';
 
 const nodeVersion = Number(process.version.split('.')[0].replace('v',''));
@@ -32,7 +31,20 @@ program.name('micrio')
 
 program.command('login')
 	.description('connect to your current Micrio session')
-	.action(login);
+	.action(() => login((loginUrl) => {
+		console.log('Go to the following url to continue the login process:');
+		console.log();
+		console.log(` > ${loginUrl}`);
+	}).then(
+		(token:UserToken) => {
+			conf.set('account', token);
+			console.log();
+			console.log('Succesfully logged in as ' + token.email +'.');
+		}, () => {
+			console.log();
+			console.log('Could not log in. Please try again.');
+		}
+	));
 
 program.command('logout')
 	.description('log out of your Micrio account for this tool')

@@ -2,8 +2,6 @@ import type { LoginStatusResult } from '@micrio/tiler-base';
 
 import { conf, urlAccountBase } from '../lib/store.js';
 
-let account = conf.get('account');
-
 const to = (fn:(()=>any)|undefined,ms:number=1000) : Promise<void> => new Promise(ok => setTimeout(async () => {await fn?.();ok()}, ms));
 
 export async function login() {
@@ -22,7 +20,7 @@ export async function login() {
 		console.log(` > ${urlAccountBase}/cli-login/${id}`);
 
 		check().then((r) => {
-			conf.set('account', account = r.token!);
+			conf.set('account', r.token!);
 			console.log();
 			console.log('Succesfully logged in as ' + r.token!.email +'.');
 		}, () => {

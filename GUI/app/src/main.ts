@@ -1,11 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
-import { upload } from './commands/upload';
+import { upload, UserToken } from '@micrio/tiler-base';
 import path from 'path';
-import { state } from './state';
-import { login } from './commands/login';
-import { UserToken } from './types';
-import { conf } from './lib/store';
-import { getGroups } from './commands/destination';
+
+import { state } from './state.js';
+import { login } from './commands/login.js';
+import { conf } from './lib/store.js';
+import { getGroups } from './commands/destination.js';
+import { Terminal } from './lib/terminal.js';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -64,6 +65,9 @@ function saveAccount(account:UserToken) : Promise<void> {
 	return mainWindow.webContents.executeJavaScript(`localStorage.setItem('account', '${JSON.stringify(account)}')`, true);
 }
 
+/** Logging logic */
+const terminal = new Terminal(state, updateState);
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -82,15 +86,36 @@ app.whenReady().then(() => {
 		mainWindow.webContents.executeJavaScript(`localStorage.removeItem('account')`, true)
 			.then(() => updateState(state.account = undefined));
 	});
-	ipcMain.on('start', () => upload(state.files, {
-		destination: state.destination!,
-		format: state.format,
-		type: state.type,
-		pdfScale: '4'
-	}, updateState).then(
-		() => updateState(state.job!.status = 'complete'),
-		e => updateState(state.error = 'Error: ' + (e?.message ?? 'Unknown error'))
-	));
+	ipcMain.on('start', () => {
+		terminal.reset();
+		state.job = {
+			status: 'Starting...',
+			started: Date.now(),
+			numProcessed: 0,
+			numUploads: 0,
+			numUploaded: 0,
+			bytesSource: 0,
+			bytesResult: 0,
+		};
+		updateState();
+		upload(
+			state.files,
+			{
+				destination: state.destination!,
+				format: state.format,
+				type: state.type,
+				pdfScale: '4'
+			},{
+				account: conf.get('account') as UserToken,
+				log: terminal.log,
+				job: state.job,
+				update: updateState
+			}
+		).then(
+			() => updateState(state.job!.status = 'complete'),
+			e => updateState(state.error = 'Error: ' + (e?.message ?? 'Unknown error'))
+		)
+	});
 	ipcMain.on('reset', () => {
 		state.files = [];
 		state.terminal = '';

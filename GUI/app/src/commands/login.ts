@@ -1,6 +1,6 @@
-import type { LoginStatusResult, UserToken } from '../types';
+import type { LoginStatusResult, UserToken } from '@micrio/tiler-base';
 
-import { urlAccountBase } from '../lib/store';
+import { urlAccountBase } from '../lib/store.js';
 
 const to = (fn:(()=>any)|undefined,ms:number=1000) : Promise<void> => new Promise(ok => setTimeout(async () => {await fn?.();ok()}, ms));
 

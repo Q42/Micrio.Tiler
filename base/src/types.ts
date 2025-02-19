@@ -34,6 +34,7 @@ export interface UserToken {
 	email: string;
 	base64: string;
 	expires: Date;
+	groupSlug?: string;
 }
 export interface LoginStatusResult {
 	status: ('ok'|'wait'|'error');
@@ -43,5 +44,12 @@ export interface LoginStatusResult {
 export type Logger = (str?:string, overwrite?:boolean) => void;
 
 export interface State {
+	/** The logged in user account */
+	account: UserToken;
+	/** Log output */
 	log: Logger;
+	/** [GUI] Optional tile job state object */
+	job?: TileJob;
+	/** [GUI] Optional state updater */
+	update?: (a:any) => void;
 }

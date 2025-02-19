@@ -54,6 +54,8 @@ program.command('upload')
 	.addOption(new Option('-t, --type <type>', 'image type').choices(['2d', '360', 'omni']).default('2d'))
 	.addOption(new Option('--pdfScale <scale>', 'PDF scale').default('4'))
 	.action((a,b,c) => {
+		if(!account?.email) throw new Error(`Not logged in. Run 'micrio login' first`);
+
 		// You can provide a wildcard in the input files, HOWEVER, it will only seek these files from
 		// the CURRENT working directory.
 		// TODO: Fix this to also be able to provide a wildcard of other directories
@@ -66,7 +68,7 @@ program.command('upload')
 		}).reduce((a, b) => [...a,...b], []).sort((a, b) => a > b ? 1 : a < b ? -1 : 0);
 		files = files.filter((f,i) => files.indexOf(f) == i);
 
-		upload(account, b, c, {log}).catch((e:Error) => console.log('Error: ' + e.message));
+		upload(files, b, {account, log}).catch((e:Error) => console.log('Error: ' + e.message));
 	});
 
 program.parse();

@@ -1,4 +1,4 @@
-import type { UIState } from './types';
+import type { UIState } from './types.js';
 
 import { contextBridge, ipcRenderer } from 'electron';
 

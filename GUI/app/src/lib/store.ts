@@ -1,4 +1,4 @@
-import type { UserToken } from '../types';
+import type { UserToken } from '@micrio/tiler-base';
 
 const dev = false;
 export const conf:Map<string, UserToken|undefined> = new Map();

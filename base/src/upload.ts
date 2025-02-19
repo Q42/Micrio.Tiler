@@ -15,14 +15,12 @@ const NUM_UPLOAD_TRIES: number = 3;
 
 const urlDashBase = 'https://dash.micr.io';
 
-let account:UserToken|undefined;
-
 let state:State|undefined;
 
 // Talk with the Micrio dashboard CLI API (dash.micr.io/api/cli/*)
 // See github.com:Q42/Micrio/server/dash.micr.io for the server code
 const api = <T>(agent: https.Agent, path:string, data:Object) : Promise<T|undefined> => new Promise((ok, err) => {
-	if(!account) return err(new Error('Not logged in'));
+	if(!state?.account) return err(new Error('Not logged in'));
 	const url = new URL(urlDashBase+path);
 	const blob = JSON.stringify(data);
 	const req = https.request({
@@ -31,7 +29,7 @@ const api = <T>(agent: https.Agent, path:string, data:Object) : Promise<T|undefi
 		method: 'POST',
 		agent: agent,
 		headers: {
-			'Cookie': `.AspNetCore.Identity.Application=${account.base64};`,
+			'Cookie': `.AspNetCore.Identity.Application=${state.account.base64};`,
 			'Content-Type': 'application/json',
 			'Content-Length': blob.length
 		}
@@ -57,9 +55,14 @@ const api = <T>(agent: https.Agent, path:string, data:Object) : Promise<T|undefi
 
 const sanitize = (f:string, outDir:string) : string => f.replace(/\\+/g,'/').replace(outDir+'/','');
 
+const setStatus = (status:string, override?:boolean, noLog?:boolean) => {
+	if(!state) return;
+	if(state.job) state?.update?.(state.job.status = status);
+	if(!noLog) state.log(status, override);
+}
+
 // Process all images and upload them to Micrio
 export async function upload(
-	userAccount:UserToken|undefined,
 	files:string[],
 	opts:{
 		destination: string;
@@ -70,8 +73,7 @@ export async function upload(
 	},
 	_state:State
 ) {
-	if(!userAccount?.email) throw new Error(`Not logged in. Run 'micrio login' first`);
-	account = userAccount;
+	if(!_state?.account?.email) throw new Error(`Not logged in. Run 'micrio login' first`);
 
 	state = _state;
 
@@ -125,6 +127,7 @@ export async function upload(
 	// Omni starts with single image to create main ID
 	// PDF one by one to preserve correct order
 	let threads = hasPdf || opts.type == 'omni' ? 1 : PROCESSING_THREADS;
+	setStatus(`Processing...`, false, true);
 	for(let i=0;i<files.length;i++) try {
 		const queue = Object.values(hQueue);
 		if(queue.length >= threads) await Promise.any(queue);
@@ -133,12 +136,14 @@ export async function upload(
 		// Function `handle` does the image tiling and adding the resulting tiles to the Uploader queue
 		hQueue[f] = handle(uploader, f, outDir, folder, opts.format, opts.type, i, files.length, omni?.id).then((r) => {
 			delete hQueue[f];
+			if(state?.job) state.update?.(state.job.numProcessed++);
+			if(i+1==files.length) setStatus('Uploading...', false, true);
 			if(opts.type == 'omni' && !omni.id) {
 				omni = r;
 				threads = OMNI_PROCESSING_THREADS;
 			}
 		}, (e) => {
-			throw e;
+			// If one image fails, everything fails
 			throw new Error(`Could not tile ${f}: ${e?.message?.trim() ?? 'Unknown error'}`);
 			origImageNum--;
 			if(opts.type == 'omni') throw e;
@@ -163,7 +168,7 @@ export async function upload(
 	// a `fetch()` call.
 	if(omni.id && omni.width && omni.height) {
 		const baseBinDir = path.join(outDir, omni.id+'_basebin');
-		state?.log('Creating optimized viewing package...');
+		setStatus('Creating optimized viewing package...');
 
 		fs.mkdirSync(baseBinDir);
 		let d = Math.max(omni.width, omni.height), l = 0;
@@ -205,12 +210,12 @@ export async function upload(
 		await api(uploader.agent, `/api/cli${folder}/@${omni.id}/status`, { status: 4 });
 	}
 
-	state?.log('Finalizing...');
+	setStatus('Finalizing...');
 
 	// Remove the entire original directory containing all tile results
 	fs.rmSync(outDir, {recursive: true, force: true});
 
-	state?.log(`${origImageNum ? 'Succesfully a' : 'A'}dded ${opts.type == 'omni' ? `a 360 object image (${origImageNum} frames)` : `${origImageNum} file${origImageNum==1?'':'s'}`} in ${Math.round(Date.now()-start)/1000}s.`, true);
+	setStatus(`${origImageNum ? 'Succesfully a' : 'A'}dded ${opts.type == 'omni' ? `a 360 object image (${origImageNum} frames)` : `${origImageNum} file${origImageNum==1?'':'s'}`} in ${Math.round(Date.now()-start)/1000}s.`, true);
 	state?.log();
 
 	process.exit(1);

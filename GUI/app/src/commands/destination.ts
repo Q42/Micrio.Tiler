@@ -1,6 +1,7 @@
-import type { Folder, Group, UserToken } from '../types';
+import type { UserToken } from '@micrio/tiler-base';
+import type { Folder, Group } from '../types.js';
 
-import { urlDashBase, conf } from '../lib/store';
+import { urlDashBase, conf } from '../lib/store.js';
 
 interface DBFolder {
 	name: string;

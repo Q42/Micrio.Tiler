@@ -68,7 +68,9 @@ program.command('upload')
 		}).reduce((a, b) => [...a,...b], []).sort((a, b) => a > b ? 1 : a < b ? -1 : 0);
 		files = files.filter((f,i) => files.indexOf(f) == i);
 
-		upload(files, b, {account, log}).catch((e:Error) => console.log('Error: ' + e.message));
+		upload(files, b, {account, log})
+			.catch((e:Error) => console.log('Error: ' + e.message))
+			.then(() => process.exit(1));
 	});
 
 program.parse();

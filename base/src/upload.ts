@@ -1,4 +1,4 @@
-import type { FormatType, ImageInfo, ImageType, R2StoreResult, TileResult, UserToken } from './types';
+import type { FormatType, ImageInfo, ImageType, Logger, R2StoreResult, State, TileResult, UserToken } from './types';
 
 import fs from 'fs';
 import os from 'os';
@@ -16,6 +16,8 @@ const NUM_UPLOAD_TRIES: number = 3;
 const urlDashBase = 'https://dash.micr.io';
 
 let account:UserToken|undefined;
+
+let state:State|undefined;
 
 // Talk with the Micrio dashboard CLI API (dash.micr.io/api/cli/*)
 // See github.com:Q42/Micrio/server/dash.micr.io for the server code
@@ -53,23 +55,29 @@ const api = <T>(agent: https.Agent, path:string, data:Object) : Promise<T|undefi
 	req.end();
 })
 
-const error = (str:string) : void => console.log('Error: ' + str);
 const sanitize = (f:string, outDir:string) : string => f.replace(/\\+/g,'/').replace(outDir+'/','');
 
 // Process all images and upload them to Micrio
-export async function upload(userAccount:UserToken|undefined, opts:{
-	destination: string;
-	format: FormatType;
-	type: ImageType;
-	pdfScale: string;
-	account?: string;
-}, o:{args: string[]}) {
-	if(!userAccount?.email) return error(`Not logged in. Run 'micrio login' first`);
+export async function upload(
+	userAccount:UserToken|undefined,
+	files:string[],
+	opts:{
+		destination: string;
+		format: FormatType;
+		type: ImageType;
+		pdfScale: string;
+		account?: string;
+	},
+	_state:State
+) {
+	if(!userAccount?.email) throw new Error(`Not logged in. Run 'micrio login' first`);
 	account = userAccount;
+
+	state = _state;
 
 	let url;
 	try { url = new URL(opts.destination) } catch(e) {
-		return error('Invalid target URL. This has to be the full URL of the target folder of the Micrio dashboard (https://dash.micr.io/...)');
+		throw new Error('Invalid target URL. This has to be the full URL of the target folder of the Micrio dashboard (https://dash.micr.io/...)');
 	}
 
 	const folder = url.pathname;
@@ -81,18 +89,7 @@ export async function upload(userAccount:UserToken|undefined, opts:{
 
 	const start = Date.now();
 
-	// You can provide a wildcard in the input files, HOWEVER, it will only seek these files from
-	// the CURRENT working directory.
-	// TODO: Fix this to also be able to provide a wildcard of other directories
-	const allFiles = fs.readdirSync('.').filter(f => !fs.lstatSync(f).isDirectory());
-	let files = o.args.map(f => {
-		if(!/\*/.test(f)) return [f]
-		const rx = new RegExp(f.replace(/\./g,'\\.').replace(/\*/g,'.+'), 'i');
-		return allFiles.filter(f => rx.test(f));
-	}).reduce((a, b) => [...a,...b], []).sort((a, b) => a > b ? 1 : a < b ? -1 : 0);
-	files = files.filter((f,i) => files.indexOf(f) == i);
-
-	if(!files.length) return error('No images to process');
+	if(!files.length) throw new Error('No images to process');
 
 	let origImageNum = files.length;
 
@@ -112,13 +109,13 @@ export async function upload(userAccount:UserToken|undefined, opts:{
 
 	// PDF parser
 	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.endsWith('.pdf')) {
-		log(`Parsing PDF file ${f}...`);
+		state?.log(`Parsing PDF file ${f}...`);
 		hasPdf = true;
 		await pdf2img.convert(f, {scale: parseInt(opts.pdfScale||'4')}).then(pages => pages.forEach((p,j) => {
 			const fName = `${f}.${(j+1).toString().padStart(4, '0')}.png`;
 			fs.writeFileSync(fName, p);
 			files.push(fName);
-		}), e => error(`PDF reading error: ${e.toString()}`));
+		}), e => {throw new Error(`PDF reading error: ${e.toString()}`)});
 		files.splice(i--, 1);
 	}}
 
@@ -132,7 +129,7 @@ export async function upload(userAccount:UserToken|undefined, opts:{
 		const queue = Object.values(hQueue);
 		if(queue.length >= threads) await Promise.any(queue);
 		const f = files[i];
-		log(`Processing ${i+1} / ${files.length}...`, 0);
+		state?.log(`Processing ${i+1} / ${files.length}...`, true);
 		// Function `handle` does the image tiling and adding the resulting tiles to the Uploader queue
 		hQueue[f] = handle(uploader, f, outDir, folder, opts.format, opts.type, i, files.length, omni?.id).then((r) => {
 			delete hQueue[f];
@@ -142,7 +139,7 @@ export async function upload(userAccount:UserToken|undefined, opts:{
 			}
 		}, (e) => {
 			throw e;
-			error(`Could not tile ${f}: ${e?.message?.trim() ?? 'Unknown error'}`);
+			throw new Error(`Could not tile ${f}: ${e?.message?.trim() ?? 'Unknown error'}`);
 			origImageNum--;
 			if(opts.type == 'omni') throw e;
 			else delete hQueue[f];
@@ -154,11 +151,11 @@ export async function upload(userAccount:UserToken|undefined, opts:{
 
 	// Wait for all images to finish processing
 	await Promise.all(Object.values(hQueue));
-	if(origImageNum) console.log();
+	if(origImageNum) state?.log();
 
 	// Wait until the Uploader has finished all of its individual upload threads
 	await uploader.complete();
-	console.log();
+	state?.log();
 
 	// In case of an omni object, create the pregenerated optimized viewing package
 	// which contains thumbnails of each individual frame
@@ -166,7 +163,7 @@ export async function upload(userAccount:UserToken|undefined, opts:{
 	// a `fetch()` call.
 	if(omni.id && omni.width && omni.height) {
 		const baseBinDir = path.join(outDir, omni.id+'_basebin');
-		console.log('Creating optimized viewing package...');
+		state?.log('Creating optimized viewing package...');
 
 		fs.mkdirSync(baseBinDir);
 		let d = Math.max(omni.width, omni.height), l = 0;
@@ -208,13 +205,13 @@ export async function upload(userAccount:UserToken|undefined, opts:{
 		await api(uploader.agent, `/api/cli${folder}/@${omni.id}/status`, { status: 4 });
 	}
 
-	console.log('Finalizing...');
+	state?.log('Finalizing...');
 
 	// Remove the entire original directory containing all tile results
 	fs.rmSync(outDir, {recursive: true, force: true});
 
-	log(`${origImageNum ? 'Succesfully a' : 'A'}dded ${opts.type == 'omni' ? `a 360 object image (${origImageNum} frames)` : `${origImageNum} file${origImageNum==1?'':'s'}`} in ${Math.round(Date.now()-start)/1000}s.`, 0);
-	console.log();
+	state?.log(`${origImageNum ? 'Succesfully a' : 'A'}dded ${opts.type == 'omni' ? `a 360 object image (${origImageNum} frames)` : `${origImageNum} file${origImageNum==1?'':'s'}`} in ${Math.round(Date.now()-start)/1000}s.`, true);
+	state?.log();
 
 	process.exit(1);
 }
@@ -313,14 +310,6 @@ async function handle(
 	return { id: res.id, width, height };
 }
 
-function log(str:string, pos?:number, newLine:boolean=false) {
-	if(!newLine) newLine = pos == undefined;
-	if(!newLine) {
-		process.stdout.cursorTo(pos ?? 0);
-		process.stdout.clearLine(1);
-	}
-	process.stdout.write((pos?' | ':'') + str + (newLine ? '\n' : '\r'));
-}
 
 function generateMDP(images:{
 	path: string;
@@ -413,7 +402,7 @@ class Uploader {
 			this.running.delete(job)
 			if(typeof job == 'string') delete this.uris[job];
 			const remaining = this.jobs.length+this.running.size
-			if(this.oncomplete) log(`Remaining uploads: ${remaining}...`, 0);
+			if(this.oncomplete) state?.log(`Remaining uploads: ${remaining}...`, true);
 			if(this.jobs.length) this.nextBatch();
 			else if(!remaining) this.oncomplete?.();
 		}));

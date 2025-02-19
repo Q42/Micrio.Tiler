@@ -15,6 +15,16 @@ export interface ImageInfo {
 	height: number;
 };
 
+export interface TileJob {
+	status: string;
+	started: number;
+	numUploads: number;
+	numUploaded: number;
+	numProcessed: number;
+	bytesSource: number;
+	bytesResult: number;
+}
+
 export interface TileResult {
 	width: number;
 	height: number;
@@ -28,4 +38,10 @@ export interface UserToken {
 export interface LoginStatusResult {
 	status: ('ok'|'wait'|'error');
 	token?: UserToken;
+}
+
+export type Logger = (str?:string, overwrite?:boolean) => void;
+
+export interface State {
+	log: Logger;
 }

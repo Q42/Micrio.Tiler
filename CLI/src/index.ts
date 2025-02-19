@@ -7,6 +7,7 @@ import { conf } from './lib/store.js';
 import process from 'process';
 import { LIB_VERSION } from './lib/version.js';
 import { login } from './commands/login.js';
+import { log } from './lib/log.js';
 
 const nodeVersion = Number(process.version.split('.')[0].replace('v',''));
 if(isNaN(nodeVersion) || nodeVersion < 18) {
@@ -43,6 +44,8 @@ program.command('logout')
 		else console.log('Not logged in.')
 	});
 
+import fs from 'fs';
+
 program.command('upload')
 	.description('upload your images to the Micrio dashboard')
 	.argument('<files>', 'one or more image files, wildcards supported (such as *.jpg)')
@@ -50,6 +53,20 @@ program.command('upload')
 	.addOption(new Option('-f, --format <format>', 'tile format').choices(['webp', 'jpg']).default('webp'))
 	.addOption(new Option('-t, --type <type>', 'image type').choices(['2d', '360', 'omni']).default('2d'))
 	.addOption(new Option('--pdfScale <scale>', 'PDF scale').default('4'))
-	.action((a,b,c) => upload(account, b, c));
+	.action((a,b,c) => {
+		// You can provide a wildcard in the input files, HOWEVER, it will only seek these files from
+		// the CURRENT working directory.
+		// TODO: Fix this to also be able to provide a wildcard of other directories
+		const allFiles = fs.readdirSync('.').filter(f => !fs.lstatSync(f).isDirectory());
+		const args = (c.args ?? []) as string[];
+		let files = args.map(f => {
+			if(!/\*/.test(f)) return [f]
+			const rx = new RegExp(f.replace(/\./g,'\\.').replace(/\*/g,'.+'), 'i');
+			return allFiles.filter(f => rx.test(f));
+		}).reduce((a, b) => [...a,...b], []).sort((a, b) => a > b ? 1 : a < b ? -1 : 0);
+		files = files.filter((f,i) => files.indexOf(f) == i);
+
+		upload(account, b, c, {log}).catch((e:Error) => console.log('Error: ' + e.message));
+	});
 
 program.parse();

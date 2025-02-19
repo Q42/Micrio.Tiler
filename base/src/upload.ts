@@ -5,7 +5,7 @@ import os from 'os';
 import path from 'path';
 import sharp from 'sharp';
 import https from 'https';
-import pdf2img from 'pdf-img-convert';
+//import pdf2img from 'pdf-img-convert';
 
 const SIGNED_URIS = 480;
 const UPLOAD_THREADS = 100;
@@ -110,6 +110,7 @@ export async function upload(
 	let hasPdf:boolean = false;
 
 	// PDF parser
+	/*
 	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.endsWith('.pdf')) {
 		state?.log(`Parsing PDF file ${f}...`);
 		hasPdf = true;
@@ -120,6 +121,7 @@ export async function upload(
 		}), e => {throw new Error(`PDF reading error: ${e.toString()}`)});
 		files.splice(i--, 1);
 	}}
+	*/
 
 	const uploader = new Uploader(httpAgent, folder, opts.format, outDir);
 

@@ -1,7 +1,9 @@
 import type { UserToken } from '@micrio/tiler-base';
 import type { Folder, Group } from '../types.js';
 
-import { urlDashBase, conf } from '../lib/store.js';
+import { conf } from '../lib/store.js';
+
+const urlDashBase = 'https://dash.micr.io';
 
 interface DBFolder {
 	name: string;

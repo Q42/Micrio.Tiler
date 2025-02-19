@@ -1,9 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
-import { upload, UserToken } from '@micrio/tiler-base';
+import { upload, UserToken, login } from '@micrio/tiler-base';
 import path from 'path';
 
 import { state } from './state.js';
-import { login } from './commands/login.js';
 import { conf } from './lib/store.js';
 import { getGroups } from './commands/destination.js';
 import { Terminal } from './lib/terminal.js';

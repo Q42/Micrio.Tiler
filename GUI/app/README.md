@@ -1,10 +1,11 @@
 # Micrio Uploader GUI
 
 ## Installing
-1. Run `npm run install-sharp` to install all cross-platform binaries for the `sharp` package
-2. Create a `bin/@img` directory in this parent directory (`../`)
-3. Copy the contents of `./node_modules/@img/` to `../bin/@img`
-4. Remove all directories in `./node_modules/@img/` that are not for your own development platform
+1. Run `pnpm i`
+2. Run `npm run install-sharp` to install all cross-platform binaries for the `sharp` package
+3. Create a `bin/@img` directory in this parent directory (`../`)
+4. Copy the contents of `./node_modules/@img/` to `../bin/@img`
+5. Remove all directories in `./node_modules/@img/` that are not for your own development platform
 
 ## Developing
 1. UI only: run `npm run dev` in `../ui`

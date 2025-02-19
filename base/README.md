@@ -10,6 +10,10 @@ It uses the [`sharp`](https://www.npmjs.com/package/sharp) NPM package for image
 
 For (experimental) PDF support, [`pdf-img-convert`](https://www.npmjs.com/package/pdf-img-convert) is used.
 
+## Developing
+
+*IMPORTANT*: When developing, make sure your system is using node version `20.13.1`. Use `nvm` to switch if necessary.
+
 ## Acknowledgements
 
 * [Erwin Verbruggen](https://github.com/verwinv) for rigorous testing

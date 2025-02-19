@@ -50,7 +50,3 @@ For more commands and options, refer to the [documentation](https://doc.micr.io/
 ## Documentation
 
 For the latest documentation, [click here](https://doc.micr.io/dashboard/v3/cli-tool.html).
-
-## Developing
-
-*IMPORTANT*: When developing, make sure your system is using node version `20.13.1`. Use `nvm` to switch if necessary.

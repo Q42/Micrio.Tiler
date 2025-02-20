@@ -40,7 +40,7 @@
 		"vite": "^5.0.12"
 	},
 	"dependencies": {
-		"@micrio/tiler-base": "^0.1.16",
+		"@micrio/tiler-base": "^0.1.17",
 		"electron-squirrel-startup": "^1.0.0",
 		"sharp": "^0.33.5"
 	},

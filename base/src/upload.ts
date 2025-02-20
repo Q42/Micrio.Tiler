@@ -122,6 +122,33 @@ export async function upload(
 	const uploader = new Uploader(httpAgent, folder, opts.format, outDir);
 	const hQueue:{[key:string]:Promise<any>} = {};
 
+	// Omni images start with single image to create main ID
+	let threads = opts.type == 'omni' ? 1 : PROCESSING_THREADS;
+
+	let totalJobs:number = 0;
+	let numProcessed:number = 0;
+
+	// Process and upload an original image file while there are available threads
+	const addToQueue = async (fileName:string, index?: number) => {
+		const queue = Object.values(hQueue);
+		if(queue.length >= threads) await Promise.any(queue);
+		hQueue[fileName] = handle(uploader, fileName, outDir, folder, opts.format, opts.type, omni?.id, index, totalJobs).then(
+			r => {
+				delete hQueue[fileName];
+				numProcessed++;
+				if(state.job) state.update?.(state.job.numProcessed = numProcessed);
+				if(numProcessed==totalJobs) setStatus('Uploading...', false, true);
+				if(opts.type == 'omni' && !omni.id) { omni = r; threads = OMNI_PROCESSING_THREADS; }
+			},
+			e => {
+				// If one image fails, everything fails
+				if(opts.type == 'omni' || hasPdf) throw e;
+				state.log(`Error: Could not tile ${fileName}: ${e?.message?.trim() ?? 'Unknown error'}`);
+				origImageNum--;
+			}
+		)
+	};
+
 	// PDF parser
 	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.endsWith('.pdf')) {
 		state?.log(`Parsing PDF file ${f}...`);
@@ -130,51 +157,33 @@ export async function upload(
 		let counter = 1;
 		const document = await pdf(f, { scale: parseInt(opts.pdfScale||'4') })
 			.catch(e => {throw new Error(`PDF reading error: ${e.toString()}`)});
+		totalJobs+=document.length;
 		for await (const image of document) {
 			state.log(`Reading page ${counter} / ${document.length}...`, true);
-			const fName = `${f}.${(counter++).toString().padStart(4, '0')}.png`;
+			const fName = `${f}.${(counter).toString().padStart(4, '0')}.png`;
 
 			// Not using the async method here corrupts the written image -_-
 			// Took a while to figure that out.
 			await fs.writeFile(fName, image);
 
-			files.push(fName);
+			// Already start uploading and processing while parsing
+			await addToQueue(fName);
+
+			counter++;
 		}
 
 		files.splice(i--, 1);
 	}}
 
-	// Omni starts with single image to create main ID
-	let threads = opts.type == 'omni' ? 1 : PROCESSING_THREADS;
-	setStatus(`Processing...`, false, true);
-	for(let i=0;i<files.length;i++) try {
-		const queue = Object.values(hQueue);
-		if(queue.length >= threads) await Promise.any(queue);
-		const f = files[i];
-		state?.log(`Processing ${i+1} / ${files.length}...`, true);
-		// Function `handle` does the image tiling and adding the resulting tiles to the Uploader queue
-		hQueue[f] = handle(uploader, f, outDir, folder, opts.format, opts.type, i, files.length, omni?.id).then((r) => {
-			delete hQueue[f];
-			if(state?.job) state.update?.(state.job.numProcessed++);
-			if(i+1==files.length) setStatus('Uploading...', false, true);
-			if(opts.type == 'omni' && !omni.id) {
-				omni = r;
-				threads = OMNI_PROCESSING_THREADS;
-			}
-		}, (e) => {
-			// If one image fails, everything fails
-			if(opts.type == 'omni' || hasPdf) throw e;
-			state.log(`Error: Could not tile ${f}: ${e?.message?.trim() ?? 'Unknown error'}`);
-			origImageNum--;
-		});
-	} catch(e) {
-		// @ts-ignore
-		throw new Error(e?.['message']??e??'An unknown error occurred');
+	// Regular image files
+	if(files.length) {
+		totalJobs+=files.length;
+		setStatus(`Processing...`, false, true);
+		for(let i=0;i<files.length;i++) await addToQueue(files[i], i);
 	}
 
 	// Wait for all images to finish processing
 	await Promise.all(Object.values(hQueue));
-	if(origImageNum) state?.log();
 
 	// Wait until the Uploader has finished all of its individual upload threads
 	await uploader.complete();
@@ -285,9 +294,9 @@ async function handle(
 	folder:string,
 	format:FormatType,
 	type:ImageType,
-	idx:number,
-	total:number,
 	omniId:string|undefined,
+	omniFrame:number,
+	omniTotalFrames:number,
 ) : Promise<ImageInfo> {
 	const isOmni = type=='omni';
 	const isPdfPage = pdfPageRx.test(f);
@@ -302,7 +311,7 @@ async function handle(
 	if(!res) throw new Error('Could not create image in Micrio! Do you have the correct permissions?');
 
 	outDir = sanitize(outDir,outDir)
-	const baseDir = path.join(outDir, res.id, isOmni ? idx.toString() : '');
+	const baseDir = path.join(outDir, res.id, isOmni ? omniFrame.toString() : '');
 
 	const {width, height} = await tile(baseDir, f, format);
 	if(!height || !width) throw new Error('Could not read image dimensions');
@@ -319,7 +328,7 @@ async function handle(
 	// `omniId` is only defined for the SECOND and later frames of an omni object
 	// So the first frame of an omni object will do this call.
 	if(!omniId) await api(uploader.agent, `/api/cli${folder}/@${res.id}/status`, {
-		width, height, status: 6, format, length: total
+		width, height, status: 6, format, length: omniTotalFrames
 	});
 
 	// Get all tiles from all subfolders of the output directory

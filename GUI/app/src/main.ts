@@ -1,11 +1,18 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { upload, UserToken, login } from '@micrio/tiler-base';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import path from 'path';
 
 import { state } from './state.js';
 import { conf } from './lib/store.js';
 import { getGroups } from './commands/destination.js';
 import { Terminal } from './lib/terminal.js';
+
+// @ts-ignore
+const require = createRequire(import.meta.url);
+// @ts-ignore
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -20,7 +27,7 @@ const createWindow = (): void => {
 		height: 600,
 		width: 800,
 		webPreferences: {
-			preload: path.join(__dirname, 'preload.js'),
+			preload: path.join(__dirname, 'preload.mjs'),
 		},
 	});
 

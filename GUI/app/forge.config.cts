@@ -1,39 +1,49 @@
-const { FusesPlugin } = require('@electron-forge/plugin-fuses');
-const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+import type { ForgeConfig } from '@electron-forge/shared-types';
+import { MakerSquirrel } from '@electron-forge/maker-squirrel';
+import { MakerZIP } from '@electron-forge/maker-zip';
+import { MakerDeb } from '@electron-forge/maker-deb';
+import { MakerRpm } from '@electron-forge/maker-rpm';
+import { VitePlugin } from '@electron-forge/plugin-vite';
+import { FusesPlugin } from '@electron-forge/plugin-fuses';
+import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'fs';
+import path from 'node:path';
 
-const getDirectories = source =>
+const getDirectories = (source:string) =>
 	fs.readdirSync(source, { withFileTypes: true })
 		.filter(dirent => dirent.isDirectory())
 		.map(dirent => dirent.name);
 
-module.exports = {
+const config: ForgeConfig = {
 	packagerConfig: {
 		asar: true,
 		icon: './public/micrio',
 	},
 	rebuildConfig: {},
-	makers: [
-		{
-			name: '@electron-forge/maker-squirrel',
-			config: {},
-		},
-		{
-			name: '@electron-forge/maker-zip',
-			platforms: ['darwin'],
-		},
-		{
-			name: '@electron-forge/maker-deb',
-			config: {},
-		},
-		{
-			name: '@electron-forge/maker-rpm',
-			config: {},
-		},
-	],
+	makers: [new MakerSquirrel({}), new MakerZIP({}, ['darwin']), new MakerRpm({}), new MakerDeb({})],
 	plugins: [
+		new VitePlugin({
+			// `build` can specify multiple entry builds, which can be Main process, Preload scripts, Worker process, etc.
+			// If you are familiar with Vite configuration, it will look really familiar.
+			build: [
+				{
+					// `entry` is just an alias for `build.lib.entry` in the corresponding file of `config`.
+					entry: 'src/main.ts',
+					config: 'vite.main.config.ts',
+				},
+				{
+					entry: 'src/preload.ts',
+					config: 'vite.preload.config.ts',
+				},
+			],
+			renderer: [
+				{
+					name: 'main_window',
+					config: 'vite.renderer.config.ts',
+				},
+			],
+		}),
 		{
 			name: '@electron-forge/plugin-auto-unpack-natives',
 			config: {},
@@ -51,9 +61,9 @@ module.exports = {
 		}),
 	],
 	hooks: {
-		postPackage: async (forgeConfig, options) => {
+		postPackage: async (forgeConfig:any, options:any) => {
 			const sourceDir = path.join('..','bin', '@img');
-			options.outputPaths.forEach(p => {
+			options.outputPaths.forEach((p:string) => {
 				const dir = options.platform == 'darwin' ?
 					path.join(p, 'micrio-gui.app', 'Contents', 'Resources', 'app.asar.unpacked', 'node_modules')
 					: path.join(p, 'resources', 'app.asar.unpacked', 'node_modules');
@@ -71,3 +81,5 @@ module.exports = {
 		}
 	}
 };
+
+export default config;

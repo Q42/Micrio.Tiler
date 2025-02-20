@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@micrio/tiler-base':
-        specifier: ^0.1.15
-        version: 0.1.15
+        specifier: ^0.1.16
+        version: 0.1.16
       commander:
         specifier: ^11.1.0
         version: 11.1.0
@@ -136,8 +136,8 @@ packages:
     resolution: {integrity: sha512-Yhlar6v9WQgUp/He7BdgzOz8lqMQ8sU+jkCq7Wx8Myc5YFJLbEe7lgui/V7G1qB1DJykHSGwreceSaD60Y0PUQ==}
     hasBin: true
 
-  '@micrio/tiler-base@0.1.15':
-    resolution: {integrity: sha512-N9S4CdsBeS61cvxvN65F7WPB9iZ1R8CM1wF+CEwXfrRt5chffF8Il6FdTe3OZNdzedsWPgeisl/PW4L2XW+w6Q==}
+  '@micrio/tiler-base@0.1.16':
+    resolution: {integrity: sha512-qdhvIg81fgYs1NDgs7AzeE0TkYSQBB00tlhcnZvlV6Bf6KnEEMBKtcNtlwEi+x9cLKwOdMQY7gUhBjN0TqsBJg==}
     engines: {node: '>=18.17.0'}
 
   '@types/node@20.17.19':
@@ -676,7 +676,7 @@ snapshots:
       - supports-color
     optional: true
 
-  '@micrio/tiler-base@0.1.15':
+  '@micrio/tiler-base@0.1.16':
     dependencies:
       pdf-to-img: 4.4.0
       sharp: 0.33.5

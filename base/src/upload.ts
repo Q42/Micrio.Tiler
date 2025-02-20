@@ -1,9 +1,8 @@
 import type { FormatType, ImageInfo, ImageType, R2StoreResult, State, TileResult } from './types';
 
-import { promises as fsPromise } from "node:fs";
-import { pdf } from "pdf-to-img";
+import { pdf } from 'pdf-to-img';
 
-import fs from 'fs';
+import { promises as fs } from 'node:fs';
 import os from 'os';
 import path from 'path';
 import sharp from 'sharp';
@@ -18,6 +17,15 @@ const NUM_UPLOAD_TRIES: number = 3;
 const urlDashBase = 'https://dash.micr.io';
 
 let state:State|undefined;
+
+const fsExists = async (filePath:string) : Promise<boolean> => {
+	try {
+		await fs.access(filePath);
+		return true; // File exists
+	} catch (error) {
+		return false; // File does not exist
+	}
+};
 
 // Talk with the Micrio dashboard CLI API (dash.micr.io/api/cli/*)
 // See github.com:Q42/Micrio/server/dash.micr.io for the server code
@@ -98,9 +106,9 @@ export async function upload(
 	let origImageNum = files.length;
 
 	const tmpDir = path.join(os.tmpdir(), '_micrio');
-	if(!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
+	if(!await fsExists(tmpDir)) await fs.mkdir(tmpDir);
 	const outDir = path.join(tmpDir, Math.floor(Math.random()*10000000)+'');
-	if(!fs.existsSync(outDir)) fs.mkdirSync(outDir);
+	if(!await fsExists(outDir)) await fs.mkdir(outDir);
 
 	// TS is weird here -- if this can be undefined, compilation messes up
 	let omni:{
@@ -110,6 +118,9 @@ export async function upload(
 	} = {};
 
 	let hasPdf:boolean = false;
+
+	const uploader = new Uploader(httpAgent, folder, opts.format, outDir);
+	const hQueue:{[key:string]:Promise<any>} = {};
 
 	// PDF parser
 	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.endsWith('.pdf')) {
@@ -125,7 +136,7 @@ export async function upload(
 
 			// Not using the async method here corrupts the written image -_-
 			// Took a while to figure that out.
-			await fsPromise.writeFile(fName, image);
+			await fs.writeFile(fName, image);
 
 			files.push(fName);
 		}
@@ -133,9 +144,6 @@ export async function upload(
 		files.splice(i--, 1);
 	}}
 
-	const uploader = new Uploader(httpAgent, folder, opts.format, outDir);
-
-	const hQueue:{[key:string]:Promise<any>} = {};
 	// Omni starts with single image to create main ID
 	let threads = opts.type == 'omni' ? 1 : PROCESSING_THREADS;
 	setStatus(`Processing...`, false, true);
@@ -155,10 +163,9 @@ export async function upload(
 			}
 		}, (e) => {
 			// If one image fails, everything fails
-			throw new Error(`Could not tile ${f}: ${e?.message?.trim() ?? 'Unknown error'}`);
+			if(opts.type == 'omni' || hasPdf) throw e;
+			state.log(`Error: Could not tile ${f}: ${e?.message?.trim() ?? 'Unknown error'}`);
 			origImageNum--;
-			if(opts.type == 'omni') throw e;
-			else delete hQueue[f];
 		});
 	} catch(e) {
 		// @ts-ignore
@@ -181,7 +188,7 @@ export async function upload(
 		const baseBinDir = path.join(outDir, omni.id+'_basebin');
 		setStatus('Creating optimized viewing package...');
 
-		fs.mkdirSync(baseBinDir);
+		await fs.mkdir(baseBinDir);
 		let d = Math.max(omni.width, omni.height), l = 0;
 		while(d > 1024) { d /= 2; l++; }
 		let dzLevels = 0, max = Math.max(omni.width, omni.height);
@@ -191,18 +198,19 @@ export async function upload(
 		for(let i=0;i<files.length;i++) {
 			const baseDir = path.join(outDir, omni.id, i.toString());
 			const baseBinImgDir = path.join(baseBinDir, i.toString());
-			fs.mkdirSync(baseBinImgDir);
-			fs.renameSync(path.join(baseDir, level.toString()), path.join(baseBinImgDir, level.toString()));
+			await fs.mkdir(baseBinImgDir);
+			await fs.rename(path.join(baseDir, level.toString()), path.join(baseBinImgDir, level.toString()));
 		}
 
 		const tiles:{
 			path: string;
 			buffer: Buffer;
 		}[] = [];
-		walkSync(baseBinDir, t => tiles.push({
+		const baseTiles = await walkSync(baseBinDir);
+		for(let t of baseTiles) tiles.push({
 			path: t.replace(/\\/g,'/').replace(/^.*_basebin\//,''),
-			buffer: fs.readFileSync(t)
-		}));
+			buffer: await fs.readFile(t)
+		});
 
 		// TODO use Uploader for this logic because it's doubled code here
 		const binPath = `${omni.id}/base.bin`;
@@ -224,45 +232,50 @@ export async function upload(
 	setStatus('Finalizing...');
 
 	// Remove the entire original directory containing all tile results
-	fs.rmSync(outDir, {recursive: true, force: true});
+	await fs.rm(outDir, {recursive: true, force: true});
 
 	setStatus(`${origImageNum ? 'Succesfully a' : 'A'}dded ${opts.type == 'omni' ? `a 360 object image (${origImageNum} frames)` : `${origImageNum} file${origImageNum==1?'':'s'}`} in ${Math.round(Date.now()-start)/1000}s.`, true);
 	state?.log();
 }
 
 // Walk through a directory and all of its recursive subdirectories and return all files in it
-const walkSync = (dir:string, callback:(s:string)=>void) : void => fs.lstatSync(dir).isDirectory()
-	? fs.readdirSync(dir).forEach(f => walkSync(path.join(dir, f), callback))
-	: callback(dir);
+export async function walkSync(name:string) : Promise<string[]> {
+	const ret:string[] = [], entry = await fs.lstat(name).catch(() => {});
+	if(entry) if(entry.isDirectory()) for (const file of await fs.readdir(name))
+		ret.push(...await walkSync(path.join(name, file)))
+	else ret.push(name)
+	return ret;
+}
 
 const pdfPageRx = /^(.*\.pdf)\.(\d+)\.(png|tif)$/;
 
 // This function does the actual image tiling using Sharp (libvips)
 const tile = (destDir: string, file:string, format:FormatType) : Promise<TileResult> => new Promise((ok, err) => {
-	const blob = fs.readFileSync(file);
-	if(state?.job) state.job.bytesSource += blob.byteLength;
-	sharp(blob, {
-		// Manual hard limit at 100,000 x 100,000 px
-		limitInputPixels: 1E5 * 1E5,
-		// By default, sharp has a low limit
-		unlimited: true
-	}).toFormat(format, {
-		// Default is WebP, and 75 is OK, otherwise it's JPG
-		quality: format == 'webp' ? 75 : 85
-	}).tile({
-		// Tile size
-		size: 1024,
-		// Micrio doesn't require an extra padded pixel
-		overlap: 0,
-		depth: 'onepixel',
-		container: 'fs',
-		// This command makes the image into a deepzoom tile pyramid
-		// The output of this operation will result in a directory with all zoom levels and tiles
-		layout: 'dz'
-	}).toFile(destDir, (error:any, info?:TileResult) => {
-		if(error||!info) err(error??'Could not tile image');
-		else ok(info);
-	})
+	fs.readFile(file).then(blob => {
+		if(state?.job) state.job.bytesSource += blob.byteLength;
+		sharp(blob, {
+			// Manual hard limit at 100,000 x 100,000 px
+			limitInputPixels: 1E5 * 1E5,
+			// By default, sharp has a low limit
+			unlimited: true
+		}).toFormat(format, {
+			// Default is WebP, and 75 is OK, otherwise it's JPG
+			quality: format == 'webp' ? 75 : 85
+		}).tile({
+			// Tile size
+			size: 1024,
+			// Micrio doesn't require an extra padded pixel
+			overlap: 0,
+			depth: 'onepixel',
+			container: 'fs',
+			// This command makes the image into a deepzoom tile pyramid
+			// The output of this operation will result in a directory with all zoom levels and tiles
+			layout: 'dz'
+		}).toFile(destDir, (error:any, info?:TileResult) => {
+			if(error||!info) err(error??'Could not tile image');
+			else ok(info);
+		})
+	}).catch(() => err('Could not read file: ' + file));
 });
 
 async function handle(
@@ -279,7 +292,7 @@ async function handle(
 	const isOmni = type=='omni';
 	const isPdfPage = pdfPageRx.test(f);
 
-	if(!fs.existsSync(f)) throw new Error(`File '${f}' not found`);
+	if(!await fsExists(f)) throw new Error(`File '${f}' not found`);
 
 	const fName = isPdfPage ? path.basename(f).replace(/\.(tif|png)$/,'') : path.basename(f);
 
@@ -295,12 +308,12 @@ async function handle(
 	if(!height || !width) throw new Error('Could not read image dimensions');
 
 	// If this is an extracted PNG file out of an original PDF file, we no longer need it
-	if(isPdfPage) fs.rmSync(f);
+	if(isPdfPage) await fs.rm(f);
 
 	// Sharp (libvips) always puts the tiles in `name_files` -- rename to our standard
-	fs.renameSync(baseDir+'_files', baseDir);
+	await fs.rename(baseDir+'_files', baseDir);
 	// Delete libvips output meta data file, not needed
-	fs.rmSync(path.join(baseDir, 'vips-properties.xml'));
+	await fs.rm(path.join(baseDir, 'vips-properties.xml'));
 
 	// Update status to Micrio
 	// `omniId` is only defined for the SECOND and later frames of an omni object
@@ -310,9 +323,7 @@ async function handle(
 	});
 
 	// Get all tiles from all subfolders of the output directory
-	const tiles:string[] = [];
-	walkSync(baseDir, t => tiles.push(t));
-	uploader.add(tiles);
+	uploader.add(await walkSync(baseDir));
 
 	// Add a final Uploader job to set the Micrio image status to Completed (4)
 	// TODO: It's possible that this function is called if there are still ongoing tile uploads
@@ -321,7 +332,7 @@ async function handle(
 	if(type != 'omni') uploader.add([() => api(uploader.agent, `/api/cli${folder}/@${res.id}/status`, { status: 4 })]);
 
 	// Remove the libvips-generated deepzoom meta file
-	fs.rmSync(baseDir+'.dzi');
+	await fs.rm(baseDir+'.dzi');
 
 	return { id: res.id, width, height };
 }
@@ -426,9 +437,9 @@ class Uploader {
 		}));
 	}
 
-	private async upload(_url:string, path:string) : Promise<void> { return new Promise((ok, err) => {
+	private async upload(_url:string, path:string) : Promise<void> { return new Promise(async (ok, err) => {
 		const url = new URL(_url);
-		const blob = fs.readFileSync(path);
+		const blob = await fs.readFile(path);
 		if(state?.job) state.job.bytesResult += blob.byteLength;
 		const req = https.request({
 			host: url.host,

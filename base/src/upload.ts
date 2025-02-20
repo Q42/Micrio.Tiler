@@ -120,7 +120,7 @@ export async function upload(
 		const document = await pdf(f, { scale: parseInt(opts.pdfScale||'4') })
 			.catch(e => {throw new Error(`PDF reading error: ${e.toString()}`)});
 		for await (const image of document) {
-			state?.log(`Page ${counter} / ${document.length}...`, true);
+			state.log(`Reading page ${counter} / ${document.length}...`, true);
 			const fName = `${f}.${(counter++).toString().padStart(4, '0')}.png`;
 
 			// Not using the async method here corrupts the written image -_-
@@ -137,8 +137,7 @@ export async function upload(
 
 	const hQueue:{[key:string]:Promise<any>} = {};
 	// Omni starts with single image to create main ID
-	// PDF one by one to preserve correct order
-	let threads = hasPdf || opts.type == 'omni' ? 1 : PROCESSING_THREADS;
+	let threads = opts.type == 'omni' ? 1 : PROCESSING_THREADS;
 	setStatus(`Processing...`, false, true);
 	for(let i=0;i<files.length;i++) try {
 		const queue = Object.values(hQueue);
@@ -282,7 +281,7 @@ async function handle(
 
 	if(!fs.existsSync(f)) throw new Error(`File '${f}' not found`);
 
-	const fName = isPdfPage ? f.replace(/\.(tif|png)$/,'') : path.basename(f);
+	const fName = isPdfPage ? path.basename(f).replace(/\.(tif|png)$/,'') : path.basename(f);
 
 	const res = omniId ? {id: omniId} : await api<{id:string}>(uploader.agent, `/api/cli${folder}/create`,{
 		name: encodeURIComponent(fName), type, format

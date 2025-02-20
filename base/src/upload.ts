@@ -1,12 +1,13 @@
-import type { FormatType, ImageInfo, ImageType, Logger, R2StoreResult, State, TileResult, UserToken } from './types';
+import type { FormatType, ImageInfo, ImageType, R2StoreResult, State, TileResult } from './types';
+
+import { promises as fsPromise } from "node:fs";
+import { pdf } from "pdf-to-img";
 
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import sharp from 'sharp';
 import https from 'https';
-
-import { parsePDF, PDFConvertOptions } from './pdf';
 
 const SIGNED_URIS = 480;
 const UPLOAD_THREADS = 100;
@@ -110,20 +111,25 @@ export async function upload(
 
 	let hasPdf:boolean = false;
 
-	const config:PDFConvertOptions = {
-		scale: parseInt(opts.pdfScale||'1'),
-		//page_numbers: [1]
-	}
-
 	// PDF parser
 	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.endsWith('.pdf')) {
 		state?.log(`Parsing PDF file ${f}...`);
 		hasPdf = true;
-		await parsePDF(f, config).then(pages => pages.forEach((p,j) => {
-			const fName = `${f}.${(j+1).toString().padStart(4, '0')}.png`;
-			fs.writeFileSync(fName, p);
+
+		let counter = 1;
+		const document = await pdf(f, { scale: parseInt(opts.pdfScale||'4') })
+			.catch(e => {throw new Error(`PDF reading error: ${e.toString()}`)});
+		for await (const image of document) {
+			state?.log(`Page ${counter} / ${document.length}...`, true);
+			const fName = `${f}.${(counter++).toString().padStart(4, '0')}.png`;
+
+			// Not using the async method here corrupts the written image -_-
+			// Took a while to figure that out.
+			await fsPromise.writeFile(fName, image);
+
 			files.push(fName);
-		}), e => {throw new Error(`PDF reading error: ${e.toString()}`)});
+		}
+
 		files.splice(i--, 1);
 	}}
 

@@ -1,4 +1,4 @@
-import type { LoginStatusResult, UserToken } from './types';
+import type { LoginStatusResult, UserToken } from './types.js';
 
 const urlAccountBase = 'https://account.micr.io';
 

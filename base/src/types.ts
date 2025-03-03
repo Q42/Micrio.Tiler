@@ -53,3 +53,5 @@ export interface State {
 	/** [GUI] Optional state updater */
 	update?: (a:any) => void;
 }
+
+export type UploadJobType = string|(() => Promise<any>);

@@ -117,8 +117,6 @@ export async function upload(
 		height?: number;
 	} = {};
 
-	let hasPdf:boolean = false;
-
 	const uploader = new Uploader(httpAgent, folder, opts.format, outDir);
 	const hQueue:{[key:string]:Promise<any>} = {};
 
@@ -129,10 +127,18 @@ export async function upload(
 	let numProcessed:number = 0;
 
 	// Process and upload an original image file while there are available threads
-	const addToQueue = async (fileName:string, index?: number) => {
+	const addToQueue = async (fileName:string, _opts:{
+		omniFrameIdx?: number;
+		pdfAlbumSlug?: string;
+	} = {}) => {
 		const queue = Object.values(hQueue);
 		if(queue.length >= threads) await Promise.any(queue);
-		hQueue[fileName] = handle(uploader, fileName, outDir, folder, opts.format, opts.type, omni?.id, index, totalJobs).then(
+		hQueue[fileName] = handle(uploader, fileName, outDir, folder, opts.format, opts.type, {
+			omniId: omni?.id,
+			omniFrame: _opts.omniFrameIdx,
+			omniTotalFrames: totalJobs,
+			albumSlug: _opts.pdfAlbumSlug
+		}).then(
 			r => {
 				delete hQueue[fileName];
 				numProcessed++;
@@ -141,8 +147,8 @@ export async function upload(
 				if(opts.type == 'omni' && !omni.id) { omni = r; threads = OMNI_PROCESSING_THREADS; }
 			},
 			e => {
-				// If one image fails, everything fails
-				if(opts.type == 'omni' || hasPdf) throw e;
+				// If one omni frame or pdf page fails, everything fails
+				if(opts.type == 'omni' || _opts.pdfAlbumSlug) throw e;
 				state.log(`Error: Could not tile ${fileName}: ${e?.message?.trim() ?? 'Unknown error'}`);
 				origImageNum--;
 			}
@@ -152,14 +158,20 @@ export async function upload(
 	// PDF parser
 	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.endsWith('.pdf')) {
 		state?.log(`Parsing PDF file ${f}...`);
-		hasPdf = true;
 
 		let counter = 1;
 		const document = await pdf(f, { scale: parseInt(opts.pdfScale||'4') })
 			.catch(e => {throw new Error(`PDF reading error: ${e.toString()}`)});
 		totalJobs+=document.length;
+
+		// Create a new Micrio PDF album in the specified folder
+		const pdfAlbumSlug = await api<{id:string}>(uploader.agent, `/api/cli${folder}/create`,{
+			name: encodeURIComponent(f),
+			type: 'pdf'
+		}).then(r => r?.id);
+
 		for await (const image of document) {
-			state.log(`Reading page ${counter} / ${document.length}...`, true);
+			state.log(`Processing page ${counter} / ${document.length}...`, true);
 			const fName = `${f}.${(counter).toString().padStart(4, '0')}.png`;
 
 			// Not using the async method here corrupts the written image -_-
@@ -167,7 +179,7 @@ export async function upload(
 			await fs.writeFile(fName, image);
 
 			// Already start uploading and processing while parsing
-			await addToQueue(fName);
+			await addToQueue(fName, { pdfAlbumSlug });
 
 			counter++;
 		}
@@ -179,7 +191,7 @@ export async function upload(
 	if(files.length) {
 		totalJobs+=files.length;
 		setStatus(`Processing...`, false, true);
-		for(let i=0;i<files.length;i++) await addToQueue(files[i], i);
+		for(let i=0;i<files.length;i++) await addToQueue(files[i], { omniFrameIdx: i });
 	}
 
 	// Wait for all images to finish processing
@@ -263,8 +275,8 @@ const tile = (destDir: string, file:string, format:FormatType) : Promise<TileRes
 	fs.readFile(file).then(blob => {
 		if(state?.job) state.job.bytesSource += blob.byteLength;
 		sharp(blob, {
-			// Manual hard limit at 100,000 x 100,000 px
-			limitInputPixels: 1E5 * 1E5,
+			// Manual hard limit at 1,000,000 x 1,000,000 px
+			limitInputPixels: 1E6 * 1E6,
 			// By default, sharp has a low limit
 			unlimited: true
 		}).toFormat(format, {
@@ -294,9 +306,12 @@ async function handle(
 	folder:string,
 	format:FormatType,
 	type:ImageType,
-	omniId:string|undefined,
-	omniFrame:number,
-	omniTotalFrames:number,
+	opts:{
+		omniId?:string;
+		omniFrame?:number;
+		omniTotalFrames?:number;
+		albumSlug?:string;
+	} = {}
 ) : Promise<ImageInfo> {
 	const isOmni = type=='omni';
 	const isPdfPage = pdfPageRx.test(f);
@@ -305,13 +320,13 @@ async function handle(
 
 	const fName = isPdfPage ? path.basename(f).replace(/\.(tif|png)$/,'') : path.basename(f);
 
-	const res = omniId ? {id: omniId} : await api<{id:string}>(uploader.agent, `/api/cli${folder}/create`,{
+	const res = opts.omniId ? {id: opts.omniId} : await api<{id:string}>(uploader.agent, `/api/cli${folder}${opts.albumSlug ? '/'+opts.albumSlug:''}/create`,{
 		name: encodeURIComponent(fName), type, format
 	});
 	if(!res) throw new Error('Could not create image in Micrio! Do you have the correct permissions?');
 
 	outDir = sanitize(outDir,outDir)
-	const baseDir = path.join(outDir, res.id, isOmni ? omniFrame.toString() : '');
+	const baseDir = path.join(outDir, res.id, isOmni ? opts.omniFrame.toString() : '');
 
 	const {width, height} = await tile(baseDir, f, format);
 	if(!height || !width) throw new Error('Could not read image dimensions');
@@ -327,8 +342,8 @@ async function handle(
 	// Update status to Micrio
 	// `omniId` is only defined for the SECOND and later frames of an omni object
 	// So the first frame of an omni object will do this call.
-	if(!omniId) await api(uploader.agent, `/api/cli${folder}/@${res.id}/status`, {
-		width, height, status: 6, format, length: omniTotalFrames
+	if(!opts.omniId) await api(uploader.agent, `/api/cli${folder}/@${res.id}/status`, {
+		width, height, status: 6, format, length: opts.omniTotalFrames
 	});
 
 	// Get all tiles from all subfolders of the output directory
@@ -398,6 +413,7 @@ class Uploader {
 		this.oncomplete = ok;
 	}) }
 
+	// Get signed R2 upload URLs for the next batch of queued file uploads
 	private getUploadUris(first?:string) : Promise<void>|void {
 		const files = this.jobs.filter(t => !(t instanceof Function || this.uris[t])).slice(0, SIGNED_URIS - (first ? 1 : 0)) as string[];
 		if(first) files.unshift(first);
@@ -405,8 +421,10 @@ class Uploader {
 		const call = api<R2StoreResult>(this.agent, `/api/${this.folder.split('/')[1]}/store`, {files : files.map(f => sanitize(f, this.outDir))})
 			.catch(e => { throw new Error('Upload error: '+(e.message ?? 'Upload permission denied')) })
 			.then(r => { if(!r) throw new Error('Upload permission denied.');
+				// After the request is completed, assign each file its signed upload URL
 				r.keys.forEach((sig,i) => this.uris[files[i]] = `https://${r.r2Base}.r2.cloudflarestorage.com/${sanitize(files[i], this.outDir)}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=${r.key}%2F${r.time.slice(0,8)}%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=${r.time}&X-Amz-Expires=300&X-Amz-Signature=${sig}&X-Amz-SignedHeaders=host&x-id=PutObject`);
 			});
+		// Until finished, assign the running promise as the upload url
 		files.forEach(f => this.uris[f] = call);
 	}
 

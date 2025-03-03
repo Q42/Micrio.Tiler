@@ -8,13 +8,13 @@ import path from 'path';
 import sharp from 'sharp';
 import https from 'https';
 
+import { api } from './lib/micrioApi';
+
 const SIGNED_URIS = 480;
 const UPLOAD_THREADS = 100;
 const PROCESSING_THREADS = 8;
 const OMNI_PROCESSING_THREADS = 2;
 const NUM_UPLOAD_TRIES: number = 3;
-
-const urlDashBase = 'https://dash.micr.io';
 
 let state:State|undefined;
 
@@ -26,42 +26,6 @@ const fsExists = async (filePath:string) : Promise<boolean> => {
 		return false; // File does not exist
 	}
 };
-
-// Talk with the Micrio dashboard CLI API (dash.micr.io/api/cli/*)
-// See github.com:Q42/Micrio/server/dash.micr.io for the server code
-const api = <T>(agent: https.Agent, path:string, data:Object) : Promise<T|undefined> => new Promise((ok, err) => {
-	if(!state?.account) return err(new Error('Not logged in'));
-	const url = new URL(urlDashBase+path);
-	const blob = JSON.stringify(data);
-	const req = https.request({
-		host: url.host,
-		path: url.pathname+url.search,
-		method: 'POST',
-		agent: agent,
-		headers: {
-			'Cookie': `.AspNetCore.Identity.Application=${state.account.base64};`,
-			'Content-Type': 'application/json',
-			'Content-Length': blob.length
-		}
-	}, res => {
-		const body:Uint8Array[] = [];
-		res.on('data', chunk => {
-			body.push(chunk);
-		})
-		.on('end', () => {
-			const b = JSON.parse(Buffer.concat(body).toString());
-			if(res.statusCode != 200) err(new Error(`${path}: ${res.statusCode} ${res.statusMessage}: ${b?.error ?? 'Unknown error'}`));
-			else ok(b);
-			req.destroy();
-		});
-	});
-	req.on('error', (e) => {
-		err(e);
-		req.destroy();
-	});
-	req.write(blob);
-	req.end();
-})
 
 const sanitize = (f:string, outDir:string) : string => f.replace(/\\+/g,'/').replace(outDir+'/','');
 
@@ -165,7 +129,7 @@ export async function upload(
 		totalJobs+=document.length;
 
 		// Create a new Micrio PDF album in the specified folder
-		const pdfAlbumSlug = await api<{id:string}>(uploader.agent, `/api/cli${folder}/create`,{
+		const pdfAlbumSlug = await api<{id:string}>(state.account, uploader.agent, `/api/cli${folder}/create`,{
 			name: encodeURIComponent(f),
 			type: 'pdf'
 		}).then(r => r?.id);
@@ -235,7 +199,7 @@ export async function upload(
 
 		// TODO use Uploader for this logic because it's doubled code here
 		const binPath = `${omni.id}/base.bin`;
-		const postUri = await api<R2StoreResult>(httpAgent, `/api/${url.pathname.split('/')[1]}/store`, {
+		const postUri = await api<R2StoreResult>(state.account, httpAgent, `/api/${url.pathname.split('/')[1]}/store`, {
 			files: [binPath]
 		}).then(r => {
 			if(!r) throw new Error('Upload permission denied.');
@@ -247,7 +211,7 @@ export async function upload(
 			headers: { 'Content-Type': 'application/octet-stream' }
 		});
 		// Tell Micrio that the omni object is really done
-		await api(uploader.agent, `/api/cli${folder}/@${omni.id}/status`, { status: 4 });
+		await api(state.account, uploader.agent, `/api/cli${folder}/@${omni.id}/status`, { status: 4 });
 	}
 
 	setStatus('Finalizing...');
@@ -320,7 +284,7 @@ async function handle(
 
 	const fName = isPdfPage ? path.basename(f).replace(/\.(tif|png)$/,'') : path.basename(f);
 
-	const res = opts.omniId ? {id: opts.omniId} : await api<{id:string}>(uploader.agent, `/api/cli${folder}${opts.albumSlug ? '/'+opts.albumSlug:''}/create`,{
+	const res = opts.omniId ? {id: opts.omniId} : await api<{id:string}>(state.account, uploader.agent, `/api/cli${folder}${opts.albumSlug ? '/'+opts.albumSlug:''}/create`,{
 		name: encodeURIComponent(fName), type, format
 	});
 	if(!res) throw new Error('Could not create image in Micrio! Do you have the correct permissions?');
@@ -342,7 +306,7 @@ async function handle(
 	// Update status to Micrio
 	// `omniId` is only defined for the SECOND and later frames of an omni object
 	// So the first frame of an omni object will do this call.
-	if(!opts.omniId) await api(uploader.agent, `/api/cli${folder}/@${res.id}/status`, {
+	if(!opts.omniId) await api(state.account, uploader.agent, `/api/cli${folder}/@${res.id}/status`, {
 		width, height, status: 6, format, length: opts.omniTotalFrames
 	});
 
@@ -353,7 +317,7 @@ async function handle(
 	// TODO: It's possible that this function is called if there are still ongoing tile uploads
 	// of this image. Fix this by adding a separate `oncomplete` trigger in Uploader for this individual
 	// tiled image, which should trigger this.
-	if(type != 'omni') uploader.add([() => api(uploader.agent, `/api/cli${folder}/@${res.id}/status`, { status: 4 })]);
+	if(type != 'omni') uploader.add([() => api(state.account, uploader.agent, `/api/cli${folder}/@${res.id}/status`, { status: 4 })]);
 
 	// Remove the libvips-generated deepzoom meta file
 	await fs.rm(baseDir+'.dzi');
@@ -418,7 +382,7 @@ class Uploader {
 		const files = this.jobs.filter(t => !(t instanceof Function || this.uris[t])).slice(0, SIGNED_URIS - (first ? 1 : 0)) as string[];
 		if(first) files.unshift(first);
 		if(!files.length) return;
-		const call = api<R2StoreResult>(this.agent, `/api/${this.folder.split('/')[1]}/store`, {files : files.map(f => sanitize(f, this.outDir))})
+		const call = api<R2StoreResult>(state.account, this.agent, `/api/${this.folder.split('/')[1]}/store`, {files : files.map(f => sanitize(f, this.outDir))})
 			.catch(e => { throw new Error('Upload error: '+(e.message ?? 'Upload permission denied')) })
 			.then(r => { if(!r) throw new Error('Upload permission denied.');
 				// After the request is completed, assign each file its signed upload URL

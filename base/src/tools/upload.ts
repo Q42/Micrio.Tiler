@@ -1,4 +1,4 @@
-import type { FormatType, ImageType, R2StoreResult, State } from './types.js';
+import type { FormatType, ImageType, R2StoreResult, State } from '../types.js';
 
 import { pdf } from 'pdf-to-img';
 
@@ -7,11 +7,11 @@ import os from 'os';
 import path from 'path';
 import https from 'https';
 
-import { OMNI_PROCESSING_THREADS, PROCESSING_THREADS } from './globals.js';
-import { api } from './lib/micrioApi.js';
-import { fsExists, walkSync } from './lib/utils.js';
-import { Uploader } from './lib/uploader.js';
-import { handle } from './lib/tiler.js';
+import { OMNI_PROCESSING_THREADS, PROCESSING_THREADS } from '../globals.js';
+import { api } from '../lib/micrioApi.js';
+import { fsExists, walkSync } from '../lib/utils.js';
+import { Uploader } from '../lib/uploader.js';
+import { handle } from '../lib/tiler.js';
 
 const setStatus = (state:State, status:string, override?:boolean, noLog?:boolean) => {
 	if(!state) return;

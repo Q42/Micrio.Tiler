@@ -11,7 +11,7 @@ import { OMNI_PROCESSING_THREADS, PROCESSING_THREADS } from '../globals.js';
 import { api } from '../lib/micrioApi.js';
 import { fsExists, walkSync } from '../lib/utils.js';
 import { Uploader } from '../lib/uploader.js';
-import { handle } from '../lib/tiler.js';
+import { process } from '../lib/tiler.js';
 
 const setStatus = (state:State, status:string, override?:boolean, noLog?:boolean) => {
 	if(!state) return;
@@ -19,7 +19,7 @@ const setStatus = (state:State, status:string, override?:boolean, noLog?:boolean
 	if(!noLog) state.log(status, override);
 }
 
-// Process all images and upload them to Micrio
+/** Process all specified and upload them to Micrio */
 export async function upload(
 	files:string[],
 	opts:{
@@ -79,7 +79,7 @@ export async function upload(
 	} = {}) => {
 		const queue = Object.values(hQueue);
 		if(queue.length >= threads) await Promise.any(queue);
-		hQueue[fileName] = handle(state, uploader, fileName, outDir, folder, opts.format, opts.type, {
+		hQueue[fileName] = process(state, uploader, fileName, outDir, folder, opts.format, opts.type, {
 			omniId: omni?.id,
 			omniFrame: _opts.omniFrameIdx,
 			omniTotalFrames: totalJobs,

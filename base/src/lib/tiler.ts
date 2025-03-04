@@ -9,9 +9,11 @@ import { promises as fs } from 'node:fs';
 import { fsExists, sanitize, walkSync } from './utils.js';
 import { api } from './micrioApi.js';
 
+// Detect a PDFjs generated page
 const pdfPageRx = /^(.*\.pdf)\.(\d+)\.(png|tif)$/;
 
-export async function handle(
+/** Process an image to be uploaded to Micrio */
+export async function process(
     state:State,
     uploader:Uploader,
     f:string,
@@ -75,7 +77,7 @@ export async function handle(
 }
 
 
-// This function does the actual image tiling using Sharp (libvips)
+/** Do the actual image tiling using Sharp (libvips) */
 const tile = (state:State, destDir: string, file:string, format:FormatType) : Promise<TileResult> => new Promise((ok, err) => {
 	fs.readFile(file).then(blob => {
 		if(state?.job) state.job.bytesSource += blob.byteLength;

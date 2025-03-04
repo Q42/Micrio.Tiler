@@ -7,6 +7,7 @@ import { NUM_UPLOAD_TRIES, SIGNED_URIS, UPLOAD_THREADS } from '../globals.js';
 import { api } from './micrioApi.js';
 import { sanitize } from './utils.js';
 
+/** A session-wide multithreaded uploader to Micrio */
 export class Uploader {
 	private jobs:UploadJobType[] = [];
 	private oncomplete:Function|undefined;
@@ -25,21 +26,23 @@ export class Uploader {
 		this.outDir = sanitize(outDir, outDir);
 	}
 
-	// This is called for each individual resulting tile of an image operation
-	// Or the final function to send the succesful status to Micrio after all tiles
-	// of an image have been uploaded.
+	/** This is called for each individual resulting tile of an image operation
+	 * Or the final function to send the succesful status to Micrio after all tiles
+	 * of an image have been uploaded.
+	 */
 	add(jobs:UploadJobType[]) {
 		this.jobs.push(...jobs);
 		if(this.state.job) this.state.update?.(this.state.job.numUploads += jobs.length);
 		this.nextBatch();
 	}
 
+	/** Async function to await queue upload completion */
 	complete() : Promise<void> { return new Promise(ok => {
 		if(this.jobs.length+this.running.size == 0) return ok();
 		this.oncomplete = ok;
 	}) }
 
-	// Get signed R2 upload URLs for the next batch of queued file uploads
+	/** Get signed R2 upload URLs for the next batch of queued file uploads */
 	private getUploadUris(first?:string) : Promise<void>|void {
 		const files = this.jobs.filter(t => !(t instanceof Function || this.uris[t])).slice(0, SIGNED_URIS - (first ? 1 : 0)) as string[];
 		if(first) files.unshift(first);
@@ -54,19 +57,20 @@ export class Uploader {
 		files.forEach(f => this.uris[f] = call);
 	}
 
+	/** Get an indivual file/tile uploadUrl */
 	private async getUploadUri(f:string) : Promise<string> {
 		if(!this.uris[f]) await this.getUploadUris(f);
 		if(this.uris[f] instanceof Promise) await this.uris[f];
 		return this.uris[f] as string;
 	}
 
-	// This makes sure all upload threads are always filled
+	/** This makes sure all upload threads are always filled */
 	private nextBatch() {
 		let r = UPLOAD_THREADS - this.running.size;
 		while(--r > 0) this.next();
 	}
 
-	// Do the next upload thread
+	/** Do the next upload thread */
 	private async next() {
 		if(this.running.size >= UPLOAD_THREADS) return;
 		const job = this.jobs.shift();
@@ -90,6 +94,7 @@ export class Uploader {
 		}));
 	}
 
+	/** Individual file / tile upload */
 	private async upload(_url:string, path:string) : Promise<void> { return new Promise(async (ok, err) => {
 		const url = new URL(_url);
 		const blob = await fs.readFile(path);

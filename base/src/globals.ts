@@ -1,5 +1,5 @@
-export const SIGNED_URIS = 480;
-export const UPLOAD_THREADS = 100;
-export const PROCESSING_THREADS = 8;
-export const OMNI_PROCESSING_THREADS = 2;
+export const SIGNED_URIS: number = 480;
+export const UPLOAD_THREADS: number = 100;
+export const PROCESSING_THREADS: number = 8;
+export const OMNI_PROCESSING_THREADS: number = 2;
 export const NUM_UPLOAD_TRIES: number = 3;

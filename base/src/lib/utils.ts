@@ -3,6 +3,7 @@ import path from 'path';
 
 export const sanitize = (f:string, outDir:string) : string => f.replace(/\\+/g,'/').replace(outDir+'/','');
 
+/** Check if a file exists */
 export const fsExists = async (filePath:string) : Promise<boolean> => {
     try {
         await fs.access(filePath);
@@ -12,7 +13,7 @@ export const fsExists = async (filePath:string) : Promise<boolean> => {
     }
 };
 
-// Walk through a directory and all of its recursive subdirectories and return all files in it
+/** Walk through a directory and all of its recursive subdirectories and return all files in it */
 export async function walkSync(name:string) : Promise<string[]> {
 	const ret:string[] = [], entry = await fs.lstat(name).catch(() => {});
 	if(entry) if(entry.isDirectory()) for (const file of await fs.readdir(name))

@@ -4,8 +4,10 @@ import https from 'https';
 
 const urlDashBase = 'https://dash.micr.io';
 
-// Talk with the Micrio dashboard CLI API (dash.micr.io/api/cli/*)
-// See github.com:Q42/Micrio/server/dash.micr.io for the server code
+/**
+ * Talk with the Micrio dashboard CLI API (https://dash.micr.io/api/cli/*)
+ * @see https://github.com:Q42/Micrio/server/dash.micr.io for the server code (Q42 only -- might open source one day)
+ */
 export const api = <T>(account: UserToken, agent: https.Agent, path:string, data:Object) : Promise<T|undefined> => new Promise((ok, err) => {
     if(!account) return err(new Error('Not logged in'));
     const url = new URL(urlDashBase+path);

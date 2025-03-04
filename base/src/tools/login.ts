@@ -4,6 +4,7 @@ const urlAccountBase = 'https://account.micr.io';
 
 const to = (fn:(()=>any)|undefined,ms:number=1000) : Promise<void> => new Promise(ok => setTimeout(async () => {await fn?.();ok()}, ms));
 
+/** Async function giving a login URL and waiting until login process has been completed */
 export const login = (
 	sendLoginUrl: (s:string) => void
 ) : Promise<UserToken> => new Promise(async (ok, err) => {

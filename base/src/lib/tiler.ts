@@ -25,7 +25,6 @@ export async function process(
 		omniId?:string;
 		omniFrame?:number;
 		omniTotalFrames?:number;
-		albumSlug?:string;
 	} = {}
 ) : Promise<ImageInfo> {
 	const isOmni = type=='omni';

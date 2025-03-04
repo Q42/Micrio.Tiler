@@ -71,13 +71,15 @@ export async function upload(
 	const hQueue:{[key:string]:Promise<any>} = {};
 
 	// Omni images start with single image to create main ID
+	// After the initial image is created, it has ID, and processing threads will be maximized
 	let threads = opts.type == 'omni' ? 1 : PROCESSING_THREADS;
 
 	let totalJobs:number = 0;
 	let numProcessed:number = 0;
+	let singleImageResultId:string|undefined;
 
 	// Process and upload an original image file while there are available threads
-	const addToQueue = async (fileName:string, _opts:{
+	const addToQueue = async (fileName:string, saveId:boolean, _opts:{
 		omniFrameIdx?: number;
 		pdfAlbumSlug?: string;
 	} = {}) => {
@@ -87,7 +89,6 @@ export async function upload(
 			omniId: omni?.id,
 			omniFrame: _opts.omniFrameIdx,
 			omniTotalFrames: totalJobs,
-			albumSlug: _opts.pdfAlbumSlug
 		}).then(
 			r => {
 				delete hQueue[fileName];
@@ -95,6 +96,8 @@ export async function upload(
 				if(state.job) state.update?.(state.job.numProcessed = numProcessed);
 				if(numProcessed==totalJobs) setStatus(state, 'Uploading...', false, true);
 				if(opts.type == 'omni' && !omni.id) { omni = r; threads = OMNI_PROCESSING_THREADS; }
+				// When the user uploaded a single omni, pdf or image, return the view URL after completion
+				if(saveId) singleImageResultId = r.id;
 			},
 			e => {
 				// If one omni frame or pdf page fails, everything fails
@@ -129,7 +132,7 @@ export async function upload(
 			await fs.writeFile(fName, image);
 
 			// Already start uploading and processing while parsing
-			await addToQueue(fName, { pdfAlbumSlug });
+			await addToQueue(fName, files.length == 1, { pdfAlbumSlug });
 
 			counter++;
 		}
@@ -141,7 +144,7 @@ export async function upload(
 	if(files.length) {
 		totalJobs+=files.length;
 		setStatus(state, 'Processing...', false, true);
-		for(let i=0;i<files.length;i++) await addToQueue(files[i], { omniFrameIdx: i });
+		for(let i=0;i<files.length;i++) await addToQueue(files[i], opts.type == 'omni' || files.length == 1, { omniFrameIdx: i });
 	}
 
 	// Wait for all images to finish processing
@@ -206,7 +209,9 @@ export async function upload(
 	await fs.rm(outDir, {recursive: true, force: true});
 
 	setStatus(state, `${origImageNum ? 'Succesfully a' : 'A'}dded ${opts.type == 'omni' ? `a 360 object image (${origImageNum} frames)` : `${origImageNum} file${origImageNum==1?'':'s'}`} in ${Math.round(Date.now()-start)/1000}s.`, true);
-	state?.log();
+
+	if(singleImageResultId) setStatus(state, 'Resulting viewable URL: https://i.micr.io/'+singleImageResultId);
+	else state?.log();
 }
 
 function generateMDP(images:{
@@ -226,4 +231,3 @@ function generateMDP(images:{
 
 	return new Blob(arr, {type: 'application/octet-stream'});
 }
-

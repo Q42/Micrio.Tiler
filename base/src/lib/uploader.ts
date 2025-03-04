@@ -47,7 +47,7 @@ export class Uploader {
 		const files = this.jobs.filter(t => !(t instanceof Function || this.uris[t])).slice(0, SIGNED_URIS - (first ? 1 : 0)) as string[];
 		if(first) files.unshift(first);
 		if(!files.length) return;
-		const call = api<R2StoreResult>(this.state.account, this.agent, `/api/${this.folder.split('/')[1]}/store`, {files : files.map(f => sanitize(f, this.outDir))})
+		const call = api<R2StoreResult>(this.state.account, this.agent, `/../${this.folder.split('/')[1]}/store`, {files : files.map(f => sanitize(f, this.outDir))})
 			.catch(e => { throw new Error('Upload error: '+(e.message ?? 'Upload permission denied')) })
 			.then(r => { if(!r) throw new Error('Upload permission denied.');
 				// After the request is completed, assign each file its signed upload URL

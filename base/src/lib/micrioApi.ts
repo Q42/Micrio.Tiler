@@ -10,7 +10,7 @@ const urlDashBase = 'https://dash.micr.io';
  */
 export const api = <T>(account: UserToken, agent: https.Agent, path:string, data:Object = {}) : Promise<T|undefined> => new Promise((ok, err) => {
 	if(!account) return err(new Error('Not logged in'));
-	const url = new URL(urlDashBase+path);
+	const url = new URL(urlDashBase+'/api/cli'+path);
 	const blob = JSON.stringify(data);
 	const req = https.request({
 		host: url.host,
@@ -28,8 +28,9 @@ export const api = <T>(account: UserToken, agent: https.Agent, path:string, data
 			body.push(chunk);
 		})
 		.on('end', () => {
-			const b = JSON.parse(Buffer.concat(body).toString());
-			if(res.statusCode != 200) err(new Error(`${path}: ${res.statusCode} ${res.statusMessage}: ${b?.error ?? 'Unknown error'}`));
+			const resp = Buffer.concat(body).toString();
+			const b = resp?.startsWith('{') ? JSON.parse(resp) : {};
+			if(res.statusCode != 200) err(new Error(`${res.statusCode} ${res.statusMessage}: ${b?.error ?? url.pathname+': Unknown error'}`));
 			else ok(b);
 			req.destroy();
 		});

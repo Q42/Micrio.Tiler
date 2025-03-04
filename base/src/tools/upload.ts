@@ -79,7 +79,7 @@ export async function upload(
 	} = {}) => {
 		const queue = Object.values(hQueue);
 		if(queue.length >= threads) await Promise.any(queue);
-		hQueue[fileName] = process(state, uploader, fileName, outDir, folder, opts.format, opts.type, {
+		hQueue[fileName] = process(state, uploader, fileName, outDir, folder+(_opts.pdfAlbumSlug ? '/'+_opts.pdfAlbumSlug:''), opts.format, opts.type, {
 			omniId: omni?.id,
 			omniFrame: _opts.omniFrameIdx,
 			omniTotalFrames: totalJobs,
@@ -111,7 +111,7 @@ export async function upload(
 		totalJobs+=document.length;
 
 		// Create a new Micrio PDF album in the specified folder
-		const pdfAlbumSlug = await api<{id:string}>(state.account, uploader.agent, `/api/cli${folder}/create`,{
+		const pdfAlbumSlug = await api<{id:string}>(state.account, uploader.agent, `${folder}/create`,{
 			name: encodeURIComponent(f),
 			type: 'pdf'
 		}).then(r => r?.id);
@@ -181,7 +181,7 @@ export async function upload(
 
 		// TODO use Uploader for this logic because it's doubled code here
 		const binPath = `${omni.id}/base.bin`;
-		const postUri = await api<R2StoreResult>(state.account, httpAgent, `/api/${url.pathname.split('/')[1]}/store`, {
+		const postUri = await api<R2StoreResult>(state.account, httpAgent, `/../${url.pathname.split('/')[1]}/store`, {
 			files: [binPath]
 		}).then(r => {
 			if(!r) throw new Error('Upload permission denied.');
@@ -193,7 +193,7 @@ export async function upload(
 			headers: { 'Content-Type': 'application/octet-stream' }
 		});
 		// Tell Micrio that the omni object is really done
-		await api(state.account, uploader.agent, `/api/cli${folder}/@${omni.id}/status`, { status: 4 });
+		await api(state.account, uploader.agent, `${folder}/@${omni.id}/status`, { status: 4 });
 	}
 
 	setStatus(state, 'Finalizing...');

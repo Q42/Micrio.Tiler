@@ -35,7 +35,7 @@ export async function process(
 
 	const fName = isPdfPage ? path.basename(f).replace(/\.(tif|png)$/,'') : path.basename(f);
 
-	const res = opts.omniId ? {id: opts.omniId} : await api<{id:string}>(state.account, uploader.agent, `/api/cli${folder}${opts.albumSlug ? '/'+opts.albumSlug:''}/create`,{
+	const res = opts.omniId ? {id: opts.omniId} : await api<{id:string}>(state.account, uploader.agent, `${folder}/create`,{
 		name: encodeURIComponent(fName), type, format
 	});
 	if(!res) throw new Error('Could not create image in Micrio! Do you have the correct permissions?');
@@ -57,7 +57,7 @@ export async function process(
 	// Update status to Micrio
 	// `omniId` is only defined for the SECOND and later frames of an omni object
 	// So the first frame of an omni object will do this call.
-	if(!opts.omniId) await api(state.account, uploader.agent, `/api/cli${folder}/@${res.id}/status`, {
+	if(!opts.omniId) await api(state.account, uploader.agent, `${folder}/@${res.id}/status`, {
 		width, height, status: 6, format, length: opts.omniTotalFrames
 	});
 
@@ -68,7 +68,7 @@ export async function process(
 	// TODO: It's possible that this function is called if there are still ongoing tile uploads
 	// of this image. Fix this by adding a separate `oncomplete` trigger in Uploader for this individual
 	// tiled image, which should trigger this.
-	if(type != 'omni') uploader.add([() => api(state.account, uploader.agent, `/api/cli${folder}/@${res.id}/status`, { status: 4 })]);
+	if(type != 'omni') uploader.add([() => api(state.account, uploader.agent, `${folder}/@${res.id}/status`, { status: 4 })]);
 
 	// Remove the libvips-generated deepzoom meta file
 	await fs.rm(baseDir+'.dzi');

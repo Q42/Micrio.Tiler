@@ -45,6 +45,10 @@ export async function upload(
 		timeout: 3000
 	});
 
+	// Check if user has access to the requested destination folder
+	// This automatically throws an error if the user doesn't have access or the folder doesn't exist
+	await api(state.account, httpAgent, `${folder}/access`);
+
 	const start = Date.now();
 
 	if(!files.length) throw new Error('No images to process');

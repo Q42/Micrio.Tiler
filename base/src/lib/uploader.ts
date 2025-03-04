@@ -18,7 +18,7 @@ export class Uploader {
 
 	constructor(
 		public agent:https.Agent,
-        private state:State,
+		private state:State,
 		private folder:string,
 		private format:FormatType,
 		private outDir:string

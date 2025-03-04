@@ -5,12 +5,12 @@ export const sanitize = (f:string, outDir:string) : string => f.replace(/\\+/g,'
 
 /** Check if a file exists */
 export const fsExists = async (filePath:string) : Promise<boolean> => {
-    try {
-        await fs.access(filePath);
-        return true; // File exists
-    } catch (error) {
-        return false; // File does not exist
-    }
+	try {
+		await fs.access(filePath);
+		return true; // File exists
+	} catch (error) {
+		return false; // File does not exist
+	}
 };
 
 /** Walk through a directory and all of its recursive subdirectories and return all files in it */

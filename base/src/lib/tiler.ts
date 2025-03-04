@@ -14,66 +14,66 @@ const pdfPageRx = /^(.*\.pdf)\.(\d+)\.(png|tif)$/;
 
 /** Process an image to be uploaded to Micrio */
 export async function process(
-    state:State,
-    uploader:Uploader,
-    f:string,
-    outDir:string,
-    folder:string,
-    format:FormatType,
-    type:ImageType,
-    opts:{
-        omniId?:string;
-        omniFrame?:number;
-        omniTotalFrames?:number;
-        albumSlug?:string;
-    } = {}
+	state:State,
+	uploader:Uploader,
+	f:string,
+	outDir:string,
+	folder:string,
+	format:FormatType,
+	type:ImageType,
+	opts:{
+		omniId?:string;
+		omniFrame?:number;
+		omniTotalFrames?:number;
+		albumSlug?:string;
+	} = {}
 ) : Promise<ImageInfo> {
-    const isOmni = type=='omni';
-    const isPdfPage = pdfPageRx.test(f);
+	const isOmni = type=='omni';
+	const isPdfPage = pdfPageRx.test(f);
 
-    if(!await fsExists(f)) throw new Error(`File '${f}' not found`);
+	if(!await fsExists(f)) throw new Error(`File '${f}' not found`);
 
-    const fName = isPdfPage ? path.basename(f).replace(/\.(tif|png)$/,'') : path.basename(f);
+	const fName = isPdfPage ? path.basename(f).replace(/\.(tif|png)$/,'') : path.basename(f);
 
-    const res = opts.omniId ? {id: opts.omniId} : await api<{id:string}>(state.account, uploader.agent, `/api/cli${folder}${opts.albumSlug ? '/'+opts.albumSlug:''}/create`,{
-        name: encodeURIComponent(fName), type, format
-    });
-    if(!res) throw new Error('Could not create image in Micrio! Do you have the correct permissions?');
+	const res = opts.omniId ? {id: opts.omniId} : await api<{id:string}>(state.account, uploader.agent, `/api/cli${folder}${opts.albumSlug ? '/'+opts.albumSlug:''}/create`,{
+		name: encodeURIComponent(fName), type, format
+	});
+	if(!res) throw new Error('Could not create image in Micrio! Do you have the correct permissions?');
 
-    outDir = sanitize(outDir,outDir)
-    const baseDir = path.join(outDir, res.id, isOmni ? opts.omniFrame.toString() : '');
+	outDir = sanitize(outDir,outDir)
+	const baseDir = path.join(outDir, res.id, isOmni ? opts.omniFrame.toString() : '');
 
-    const {width, height} = await tile(state, baseDir, f, format);
-    if(!height || !width) throw new Error('Could not read image dimensions');
+	const {width, height} = await tile(state, baseDir, f, format);
+	if(!height || !width) throw new Error('Could not read image dimensions');
 
-    // If this is an extracted PNG file out of an original PDF file, we no longer need it
-    if(isPdfPage) await fs.rm(f);
+	// If this is an extracted PNG file out of an original PDF file, we no longer need it
+	if(isPdfPage) await fs.rm(f);
 
-    // Sharp (libvips) always puts the tiles in `name_files` -- rename to our standard
-    await fs.rename(baseDir+'_files', baseDir);
-    // Delete libvips output meta data file, not needed
-    await fs.rm(path.join(baseDir, 'vips-properties.xml'));
+	// Sharp (libvips) always puts the tiles in `name_files` -- rename to our standard
+	await fs.rename(baseDir+'_files', baseDir);
+	// Delete libvips output meta data file, not needed
+	await fs.rm(path.join(baseDir, 'vips-properties.xml'));
 
-    // Update status to Micrio
-    // `omniId` is only defined for the SECOND and later frames of an omni object
-    // So the first frame of an omni object will do this call.
-    if(!opts.omniId) await api(state.account, uploader.agent, `/api/cli${folder}/@${res.id}/status`, {
-        width, height, status: 6, format, length: opts.omniTotalFrames
-    });
+	// Update status to Micrio
+	// `omniId` is only defined for the SECOND and later frames of an omni object
+	// So the first frame of an omni object will do this call.
+	if(!opts.omniId) await api(state.account, uploader.agent, `/api/cli${folder}/@${res.id}/status`, {
+		width, height, status: 6, format, length: opts.omniTotalFrames
+	});
 
-    // Get all tiles from all subfolders of the output directory
-    uploader.add(await walkSync(baseDir));
+	// Get all tiles from all subfolders of the output directory
+	uploader.add(await walkSync(baseDir));
 
-    // Add a final Uploader job to set the Micrio image status to Completed (4)
-    // TODO: It's possible that this function is called if there are still ongoing tile uploads
-    // of this image. Fix this by adding a separate `oncomplete` trigger in Uploader for this individual
-    // tiled image, which should trigger this.
-    if(type != 'omni') uploader.add([() => api(state.account, uploader.agent, `/api/cli${folder}/@${res.id}/status`, { status: 4 })]);
+	// Add a final Uploader job to set the Micrio image status to Completed (4)
+	// TODO: It's possible that this function is called if there are still ongoing tile uploads
+	// of this image. Fix this by adding a separate `oncomplete` trigger in Uploader for this individual
+	// tiled image, which should trigger this.
+	if(type != 'omni') uploader.add([() => api(state.account, uploader.agent, `/api/cli${folder}/@${res.id}/status`, { status: 4 })]);
 
-    // Remove the libvips-generated deepzoom meta file
-    await fs.rm(baseDir+'.dzi');
+	// Remove the libvips-generated deepzoom meta file
+	await fs.rm(baseDir+'.dzi');
 
-    return { id: res.id, width, height };
+	return { id: res.id, width, height };
 }
 
 

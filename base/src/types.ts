@@ -13,7 +13,20 @@ export interface ImageInfo {
 	id: string;
 	width: number;
 	height: number;
+	baseDir: string;
+	omniFrame?: number;
 };
+
+export interface MicrioImageInfo {
+	id: string;
+	width: number;
+	height: number;
+	created: number;
+	title: string;
+	isWebP: boolean;
+	isPng: boolean;
+	isDeepZoom: boolean;
+}
 
 export interface TileJob {
 	status: string;
@@ -55,3 +68,14 @@ export interface State {
 }
 
 export type UploadJobType = string|(() => Promise<any>);
+
+export interface PDFAlbumResult {
+	id:string;
+	slug:string;
+	created:number;
+}
+
+export interface FSFile {
+	path: string;
+	buffer: Buffer|Uint8Array;
+}

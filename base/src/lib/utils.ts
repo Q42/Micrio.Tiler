@@ -21,3 +21,6 @@ export async function walkSync(name:string) : Promise<string[]> {
 	else ret.push(name)
 	return ret;
 }
+
+/** Convert a julian date to a timestamp */
+export const jdToTime = (jd:number) : number => Math.floor((jd - 2440587.5) * 86400000);

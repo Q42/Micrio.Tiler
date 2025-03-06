@@ -52,6 +52,8 @@ export async function process(
 	await fs.rename(baseDir+'_files', baseDir);
 	// Delete libvips output meta data file, not needed
 	await fs.rm(path.join(baseDir, 'vips-properties.xml'));
+	// Remove the libvips-generated deepzoom meta file
+	await fs.rm(baseDir+'.dzi');
 
 	// Update status to Micrio
 	// `omniId` is only defined for the SECOND and later frames of an omni object
@@ -69,10 +71,7 @@ export async function process(
 	// tiled image, which should trigger this.
 	if(type != 'omni') uploader.add([() => api(state.account, uploader.agent, `${folder}/@${res.id}/status`, { status: 4 })]);
 
-	// Remove the libvips-generated deepzoom meta file
-	await fs.rm(baseDir+'.dzi');
-
-	return { id: res.id, width, height };
+	return { id: res.id, width, height, baseDir, omniFrame: opts?.omniFrame };
 }
 
 

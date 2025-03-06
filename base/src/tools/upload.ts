@@ -1,4 +1,4 @@
-import type { FormatType, ImageType, R2StoreResult, State } from '../types.js';
+import type { FormatType, ImageInfo, ImageType, PDFAlbumResult, R2StoreResult, State } from '../types.js';
 
 import { pdf } from 'pdf-to-img';
 
@@ -9,9 +9,10 @@ import https from 'https';
 
 import { OMNI_PROCESSING_THREADS, PROCESSING_THREADS } from '../globals.js';
 import { api } from '../lib/micrioApi.js';
-import { fsExists, walkSync } from '../lib/utils.js';
+import { fsExists, jdToTime } from '../lib/utils.js';
 import { Uploader } from '../lib/uploader.js';
 import { process } from '../lib/tiler.js';
+import { getArchiveBin } from '../lib/archive.js';
 
 const setStatus = (state:State, status:string, override?:boolean, noLog?:boolean) => {
 	if(!state) return;
@@ -78,14 +79,17 @@ export async function upload(
 	let numProcessed:number = 0;
 	let singleImageResultId:string|undefined;
 
+	// Original files mapped to output directories
+	const fileOutputDirs:Map<string, [string,ImageInfo][]> = new Map();
+
 	// Process and upload an original image file while there are available threads
 	const addToQueue = async (fileName:string, saveId:boolean, _opts:{
 		omniFrameIdx?: number;
-		pdfAlbumSlug?: string;
+		pdfAlbum?: PDFAlbumResult;
 	} = {}) => {
 		const queue = Object.values(hQueue);
 		if(queue.length >= threads) await Promise.any(queue);
-		hQueue[fileName] = process(state, uploader, fileName, outDir, folder+(_opts.pdfAlbumSlug ? '/'+_opts.pdfAlbumSlug:''), opts.format, opts.type, {
+		hQueue[fileName] = process(state, uploader, fileName, outDir, folder+(_opts.pdfAlbum ? '/'+_opts.pdfAlbum.slug:''), opts.format, opts.type, {
 			omniId: omni?.id,
 			omniFrame: _opts.omniFrameIdx,
 			omniTotalFrames: totalJobs,
@@ -95,18 +99,26 @@ export async function upload(
 				numProcessed++;
 				if(state.job) state.update?.(state.job.numProcessed = numProcessed);
 				if(numProcessed==totalJobs) setStatus(state, 'Uploading...', false, true);
-				if(opts.type == 'omni' && !omni.id) { omni = r; threads = OMNI_PROCESSING_THREADS; }
+				if(opts.type == 'omni' && !omni.id) {
+					fileOutputDirs.set(r.id, []);
+					omni = r;
+					threads = OMNI_PROCESSING_THREADS;
+				}
 				// When the user uploaded a single omni, pdf or image, return the view URL after completion
 				if(saveId) singleImageResultId = r.id;
+				// When reading to create preview archive, add the image ID there
+				fileOutputDirs.get(omni?.id || _opts.pdfAlbum?.id)?.push([fileName, r]);
 			},
 			e => {
 				// If one omni frame or pdf page fails, everything fails
-				if(opts.type == 'omni' || _opts.pdfAlbumSlug) throw e;
+				if(opts.type == 'omni' || _opts.pdfAlbum) throw e;
 				state.log(`Error: Could not tile ${fileName}: ${e?.message?.trim() ?? 'Unknown error'}`);
 				origImageNum--;
 			}
 		)
 	};
+
+	const pdfAlbums:PDFAlbumResult[] = [];
 
 	// PDF parser
 	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.endsWith('.pdf')) {
@@ -118,10 +130,13 @@ export async function upload(
 		totalJobs+=document.length;
 
 		// Create a new Micrio PDF album in the specified folder
-		const pdfAlbumSlug = await api<{id:string}>(state.account, uploader.agent, `${folder}/create`,{
+		const pdfAlbum = await api<PDFAlbumResult>(state.account, uploader.agent, `${folder}/create`,{
 			name: encodeURIComponent(f),
 			type: 'pdf'
-		}).then(r => r?.id);
+		});
+
+		fileOutputDirs.set(pdfAlbum.id, []);
+		pdfAlbums.push(pdfAlbum);
 
 		for await (const image of document) {
 			state.log(`Processing page ${counter} / ${document.length}...`, true);
@@ -132,7 +147,7 @@ export async function upload(
 			await fs.writeFile(fName, image);
 
 			// Already start uploading and processing while parsing
-			await addToQueue(fName, files.length == 1, { pdfAlbumSlug });
+			await addToQueue(fName, files.length == 1, { pdfAlbum });
 
 			counter++;
 		}
@@ -154,40 +169,14 @@ export async function upload(
 	await uploader.complete();
 	state?.log();
 
-	// In case of an omni object, create the pregenerated optimized viewing package
-	// which contains thumbnails of each individual frame
-	// TODO this code can be optimized, for instance using the Uploader instead of
-	// a `fetch()` call.
-	if(omni.id && omni.width && omni.height) {
-		const baseBinDir = path.join(outDir, omni.id+'_basebin');
-		setStatus(state, 'Creating optimized viewing package...');
-
-		await fs.mkdir(baseBinDir);
-		let d = Math.max(omni.width, omni.height), l = 0;
-		while(d > 1024) { d /= 2; l++; }
-		let dzLevels = 0, max = Math.max(omni.width, omni.height);
-		do dzLevels++; while ((max /= 2) > 1);
-		const level = dzLevels - l;
-
-		for(let i=0;i<files.length;i++) {
-			const baseDir = path.join(outDir, omni.id, i.toString());
-			const baseBinImgDir = path.join(baseBinDir, i.toString());
-			await fs.mkdir(baseBinImgDir);
-			await fs.rename(path.join(baseDir, level.toString()), path.join(baseBinImgDir, level.toString()));
-		}
-
-		const tiles:{
-			path: string;
-			buffer: Buffer;
-		}[] = [];
-		const baseTiles = await walkSync(baseBinDir);
-		for(let t of baseTiles) tiles.push({
-			path: t.replace(/\\/g,'/').replace(/^.*_basebin\//,''),
-			buffer: await fs.readFile(t)
-		});
+	// In case of an omni object or PDF file, create the pregenerated optimized viewing package
+	// which contains thumbnails of each individual frame/page
+	for(let [containerId, entries] of Array.from(fileOutputDirs.entries())) {
+		const album = pdfAlbums.find(a => a.id == containerId);
+		const archiveBin = await getArchiveBin(outDir, opts.format, containerId, entries, omni?.id);
+		const binPath = omni?.id ? `${omni.id}/base.bin` : `g/${containerId}.${Math.floor(jdToTime(album.created)/1000)}.bin`;
 
 		// TODO use Uploader for this logic because it's doubled code here
-		const binPath = `${omni.id}/base.bin`;
 		const postUri = await api<R2StoreResult>(state.account, httpAgent, `/../${url.pathname.split('/')[1]}/store`, {
 			files: [binPath]
 		}).then(r => {
@@ -196,11 +185,12 @@ export async function upload(
 		});
 		await fetch(postUri[0], {
 			method: 'PUT',
-			body: generateMDP(tiles),
+			body: archiveBin,
 			headers: { 'Content-Type': 'application/octet-stream' }
 		});
-		// Tell Micrio that the omni object is really done
-		await api(state.account, uploader.agent, `${folder}/@${omni.id}/status`, { status: 4 });
+
+		// Tell Micrio that the omni object or album is published
+		await api(state.account, uploader.agent, `${folder}${album ? '/'+album.slug : ''}/@${omni.id || 'album'}/status`, { status: 4, albumVersion: album?.created });
 	}
 
 	setStatus(state, 'Finalizing...');
@@ -208,26 +198,7 @@ export async function upload(
 	// Remove the entire original directory containing all tile results
 	await fs.rm(outDir, {recursive: true, force: true});
 
-	setStatus(state, `${origImageNum ? 'Succesfully a' : 'A'}dded ${opts.type == 'omni' ? `a 360 object image (${origImageNum} frames)` : `${origImageNum} file${origImageNum==1?'':'s'}`} in ${Math.round(Date.now()-start)/1000}s.`, true);
+	setStatus(state, `${origImageNum ? 'Succesfully a' : 'A'}dded ${opts.type == 'omni' ? `a 360 object image (${origImageNum} frames)` : `${origImageNum} file${origImageNum==1?'':'s'}`} in ${Math.round(Date.now()-start)/1000}s.`);
 
 	if(singleImageResultId) setStatus(state, 'Resulting viewable URL: https://i.micr.io/'+singleImageResultId);
-	else state?.log();
-}
-
-function generateMDP(images:{
-	path: string;
-	buffer: Buffer;
-}[]) {
-	const enc = new TextEncoder();
-	const arr:Uint8Array[] = [];
-	images.forEach(i => {
-		if(!i.buffer || !i.path) return;
-		const name = enc.encode(i.path); // byte[20]
-		const size = i.buffer.byteLength.toString(8); // byte[12]
-		arr.push(name, new Uint8Array(20 - name.byteLength));
-		arr.push(enc.encode('0'.repeat(12 - size.length)+size));
-		arr.push(i.buffer);
-	});
-
-	return new Blob(arr, {type: 'application/octet-stream'});
 }

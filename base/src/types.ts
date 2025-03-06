@@ -67,7 +67,11 @@ export interface State {
 	update?: (a:any) => void;
 }
 
-export type UploadJobType = string|(() => Promise<any>);
+export type CustomUploadJob = {
+	blob: Uint8Array;
+	path: string;
+}
+export type UploadJobType = string|CustomUploadJob|(() => Promise<any>);
 
 export interface PDFAlbumResult {
 	id:string;

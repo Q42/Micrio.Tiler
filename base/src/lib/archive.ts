@@ -11,14 +11,13 @@ export async function getArchiveBin(
 	containerId:string,
 	entries:[string, ImageInfo][],
 	omniId?: string
-) : Promise<Blob> {
+) : Promise<Uint8Array> {
 	const archiveDir = path.join(outDir, containerId+'_basebin');
 	const start = Date.now();
 	const isOmni = !!omniId;
 	await fs.mkdir(archiveDir);
 	const delta = isOmni ? 0 : entries.length > 200 ? 2 : entries.length > 50 ? 1 : 0;
 	const albumImages:MicrioImageInfo[] = [];
-	console.log('get archive??', omniId, isOmni);
 	for(let [fileName, info] of entries) {
 		const level:string = getThumbLevel(info, delta).toString();
 		const archiveImgDir = path.join(archiveDir, (info.omniFrame ?? info.id).toString());
@@ -54,7 +53,7 @@ export async function getArchiveBin(
 		buffer: await fs.readFile(f)
 	})});
 
-	return generateMDP(bundleFiles);
+	return generateMDP(bundleFiles).arrayBuffer().then(r => new Uint8Array(r));
 }
 
 function getThumbLevel(info:ImageInfo, delta:number) : number {

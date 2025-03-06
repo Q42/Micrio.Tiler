@@ -1,4 +1,4 @@
-import type { FormatType, ImageInfo, ImageType, PDFAlbumResult, R2StoreResult, State } from '../types.js';
+import type { FormatType, ImageInfo, ImageType, PDFAlbumResult, State } from '../types.js';
 
 import { pdf } from 'pdf-to-img';
 
@@ -167,31 +167,24 @@ export async function upload(
 
 	// Wait until the Uploader has finished all of its individual upload threads
 	await uploader.complete();
-	state?.log();
 
 	// In case of an omni object or PDF file, create the pregenerated optimized viewing package
 	// which contains thumbnails of each individual frame/page
 	for(let [containerId, entries] of Array.from(fileOutputDirs.entries())) {
 		const album = pdfAlbums.find(a => a.id == containerId);
-		const archiveBin = await getArchiveBin(outDir, opts.format, containerId, entries, omni?.id);
-		const binPath = omni?.id ? `${omni.id}/base.bin` : `g/${containerId}.${Math.floor(jdToTime(album.created)/1000)}.bin`;
-
-		// TODO use Uploader for this logic because it's doubled code here
-		const postUri = await api<R2StoreResult>(state.account, httpAgent, `/../${url.pathname.split('/')[1]}/store`, {
-			files: [binPath]
-		}).then(r => {
-			if(!r) throw new Error('Upload permission denied.');
-			return r.keys.map((sig,i) => `https://${r.r2Base}.r2.cloudflarestorage.com/${binPath}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=${r.key}%2F${r.time.slice(0,8)}%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=${r.time}&X-Amz-Expires=300&X-Amz-Signature=${sig}&X-Amz-SignedHeaders=host&x-id=PutObject`)
-		});
-		await fetch(postUri[0], {
-			method: 'PUT',
-			body: archiveBin,
-			headers: { 'Content-Type': 'application/octet-stream' }
-		});
-
-		// Tell Micrio that the omni object or album is published
-		await api(state.account, uploader.agent, `${folder}${album ? '/'+album.slug : ''}/@${omni.id || 'album'}/status`, { status: 4, albumVersion: album?.created });
+		// Generate and upload the file and tell Micrio that the omni object or album is published
+		uploader.add([
+			{
+				path: omni?.id ? `${omni.id}/base.bin` : `g/${containerId}.${Math.floor(jdToTime(album.created)/1000)}.bin`,
+				blob: await getArchiveBin(outDir, opts.format, containerId, entries, omni?.id)
+			},
+			() => api(state.account, uploader.agent, `${folder}${album ? '/'+album.slug : ''}/@${omni.id || 'album'}/status`, { status: 4, albumVersion: album?.created })
+		]);
 	}
+
+	// Wait until the Uploader has finished all of its individual upload threads
+	await uploader.complete();
+	state?.log();
 
 	setStatus(state, 'Finalizing...');
 

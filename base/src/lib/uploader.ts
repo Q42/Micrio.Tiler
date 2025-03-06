@@ -44,7 +44,7 @@ export class Uploader {
 
 	/** Get signed R2 upload URLs for the next batch of queued file uploads */
 	private getUploadUris(first?:string) : Promise<void>|void {
-		const files = this.jobs.filter(t => !(t instanceof Function || this.uris[t])).slice(0, SIGNED_URIS - (first ? 1 : 0)) as string[];
+		const files = this.jobs.filter(t => !(t instanceof Function || this.uris[typeof t == 'string' ? t : t.path])).slice(0, SIGNED_URIS - (first ? 1 : 0)) as string[];
 		if(first) files.unshift(first);
 		if(!files.length) return;
 		const call = api<R2StoreResult>(this.state.account, this.agent, `/../${this.folder.split('/')[1]}/store`, {files : files.map(f => sanitize(f, this.outDir))})
@@ -75,8 +75,10 @@ export class Uploader {
 		if(this.running.size >= UPLOAD_THREADS) return;
 		const job = this.jobs.shift();
 		if(!job) return;
-		this.running.set(job, (job instanceof Function ? job() : this.getUploadUri(job).then(uri => this.upload(uri!, job)))
-		.catch((e) => {
+		this.running.set(job, (job instanceof Function ? job()
+			: typeof job == 'string' ? this.getUploadUri(job).then(uri => this.upload(uri!, job))
+			: this.getUploadUri(job.path).then(uri => this.upload(uri!, job.path, job.blob))
+		).catch((e) => {
 			const numErrored = (this.errored.get(job) ?? 0) + 1;
 			this.errored.set(job, numErrored);
 			if(numErrored > NUM_UPLOAD_TRIES)
@@ -95,9 +97,9 @@ export class Uploader {
 	}
 
 	/** Individual file / tile upload */
-	private async upload(_url:string, path:string) : Promise<void> { return new Promise(async (ok, err) => {
+	private async upload(_url:string, path:string, _blob?:Uint8Array) : Promise<void> { return new Promise(async (ok, err) => {
 		const url = new URL(_url);
-		const blob = await fs.readFile(path);
+		const blob:Buffer|Uint8Array = _blob ?? await fs.readFile(path);
 		if(this.state?.job) this.state.job.bytesResult += blob.byteLength;
 		const req = https.request({
 			host: url.host,
@@ -105,7 +107,7 @@ export class Uploader {
 			method: 'PUT',
 			agent: this.agent,
 			headers: {
-				'Content-Type': `image/${this.format}`,
+				'Content-Type': _blob ? 'application/octet-stream' : `image/${this.format}`,
 				'Content-Length': blob.byteLength,
 			}
 		}, res => {

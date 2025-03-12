@@ -30,7 +30,10 @@ export const api = <T>(account: UserToken, agent: https.Agent, path:string, data
 		.on('end', () => {
 			const resp = Buffer.concat(body).toString();
 			const b = resp?.startsWith('{') ? JSON.parse(resp) : {};
-			if(res.statusCode != 200) err(new Error(`${res.statusCode} ${res.statusMessage}: ${b?.error ?? url.pathname+': Unknown error'}`));
+			if(res.statusCode != 200) {
+				const message = res.statusCode == 403 ? 'Access denied' : 'Unknown error';
+				err(new Error(`${res.statusCode} ${res.statusMessage}: ${b?.error ?? url.pathname+': '+message}`));
+			}
 			else ok(b);
 			req.destroy();
 		});

@@ -79,6 +79,8 @@ export class Uploader {
 			: typeof job == 'string' ? this.getUploadUri(job).then(uri => this.upload(uri!, job))
 			: this.getUploadUri(job.path).then(uri => this.upload(uri!, job.path, job.blob))
 		).catch((e) => {
+			// Could not get upload URLs -- immediately kill
+			if(e?.message?.startsWith('Upload error: ')) throw e;
 			const numErrored = (this.errored.get(job) ?? 0) + 1;
 			this.errored.set(job, numErrored);
 			if(numErrored > NUM_UPLOAD_TRIES)

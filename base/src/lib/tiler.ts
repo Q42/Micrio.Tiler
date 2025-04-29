@@ -25,6 +25,7 @@ export async function process(
 		omniId?:string;
 		omniFrame?:number;
 		omniTotalFrames?:number;
+		watermarkPath?:string;
 	} = {}
 ) : Promise<ImageInfo> {
 	const isOmni = type=='omni';
@@ -54,6 +55,9 @@ export async function process(
 	await fs.rm(path.join(baseDir, 'vips-properties.xml'));
 	// Remove the libvips-generated deepzoom meta file
 	await fs.rm(baseDir+'.dzi');
+
+	if(opts.watermarkPath || true)
+		await watermarkTiles(state, baseDir, opts.watermarkPath ?? 'micrio-watermark-30.png');
 
 	// Update status to Micrio
 	// `omniId` is only defined for the SECOND and later frames of an omni object
@@ -103,3 +107,43 @@ const tile = (state:State, destDir: string, file:string, format:FormatType) : Pr
 		})
 	}).catch(() => err('Could not read file: ' + file));
 });
+
+async function watermarkTiles(state:State, tilesDir:string, watermarkPath:string) {
+	const allFilePaths = await walkSync(tilesDir);
+	const allImagePaths = allFilePaths.filter(f => f.match(/\.jpe?g|webp|jfif|png|pdf|tif$/));
+
+	const watermark = sharp(watermarkPath).png();
+
+	sharp.cache(false); // Disable sharp cache to avoid race conditions writing+reading to the same file
+
+	let counter = 0;
+	// We track the watermark size for each zoom level, so all tiles of the same zoom layer will always have the same size
+	const watermarkSizeByZoomLevel: Record<string, number> = {};
+	// Loop through all images and watermark them
+	for (const filePath of allImagePaths) {
+		state.log(`Watermarking ${++counter} / ${allImagePaths.length}...`, true);
+
+		const zoomLevel = filePath.match(/[\\\/](\d+)[\\\/]\w+\.\w+$/)?.[1];
+		// const tilePath = path.join(tilesDir, filePath);
+		const tile = sharp(filePath);
+		const { width, height } = await tile.metadata();
+
+		const maxWatermarkDim = watermarkSizeByZoomLevel[zoomLevel] ??= Math.floor(Math.max(width, height) * .07);
+		if (maxWatermarkDim < 1) continue; // If watermark would be smaller than 1px, skip it
+
+		// Resize watermark if needed, or position as desired
+		const watermarked = await tile.webp()
+		  .composite([{
+			input: await watermark
+				.resize({width: maxWatermarkDim, height: maxWatermarkDim, fit: 'inside', })
+				.toBuffer(),
+			left: Math.floor(maxWatermarkDim * .2),
+			top: Math.floor(maxWatermarkDim * .2),
+		  }])
+		  .toBuffer();
+  
+		await fs.writeFile(filePath, watermarked);
+	}
+
+	sharp.cache(true); // Re-enable sharp cache
+}

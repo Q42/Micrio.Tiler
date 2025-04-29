@@ -9,6 +9,7 @@
 	"scripts": {
 		"prebuild": "node -p \"'export const LIB_VERSION = ' + JSON.stringify(require('./package.json').version) + ';'\" > src/lib/version.ts",
 		"build": "tsc",
+		"build-watch": "tsc --watch",
 		"prepublishOnly": "npm run build"
 	},
 	"keywords": [

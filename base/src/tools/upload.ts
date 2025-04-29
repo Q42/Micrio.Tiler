@@ -1,4 +1,4 @@
-import type { FormatType, ImageInfo, ImageType, PDFAlbumResult, State } from '../types.js';
+import type { FormatType, GroupInfo, ImageInfo, ImageType, PDFAlbumResult, State } from '../types.js';
 
 import { pdf } from 'pdf-to-img';
 
@@ -29,6 +29,7 @@ export async function upload(
 		type: ImageType;
 		pdfScale: string;
 		account?: string;
+		skipWatermark?: boolean;
 	},
 	state:State
 ) {
@@ -40,15 +41,12 @@ export async function upload(
 	}
 
 	const folder = url.pathname;
-	const httpAgent = new https.Agent({
-		rejectUnauthorized: true,
-		keepAlive: true,
-		timeout: 3000
-	});
+	const groupSlug = folder.split('/')[0];
+	const httpAgent = new https.Agent({rejectUnauthorized: true, keepAlive: true, timeout: 3000});
 
 	// Check if user has access to the requested destination folder
 	// This automatically throws an error if the user doesn't have access or the folder doesn't exist
-	await api(state.account, httpAgent, `${folder}/access`);
+	const groupInfo: GroupInfo = await api(state.account, httpAgent, `/${groupSlug}/info`, );
 
 	const start = Date.now();
 
@@ -93,6 +91,7 @@ export async function upload(
 			omniId: omni?.id,
 			omniFrame: _opts.omniFrameIdx,
 			omniTotalFrames: totalJobs,
+			watermarkUrl: opts.skipWatermark ? undefined : groupInfo.watermarkUrl,
 		}).then(
 			r => {
 				delete hQueue[fileName];

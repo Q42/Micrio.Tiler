@@ -65,6 +65,7 @@ program.command('upload')
 	.addOption(new Option('-f, --format <format>', 'tile format').choices(['webp', 'jpg']).default('webp'))
 	.addOption(new Option('-t, --type <type>', 'image type').choices(['2d', '360', 'omni']).default('2d'))
 	.addOption(new Option('--pdfScale <scale>', 'PDF scale').default('4'))
+	.addOption(new Option('--skipWatermark', 'Skip adding the watermark to the tiles').default(false))
 	.action((a,b,c) => {
 		if(!account?.email) throw new Error(`Not logged in. Run 'micrio login' first`);
 

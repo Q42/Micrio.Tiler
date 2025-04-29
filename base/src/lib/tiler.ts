@@ -25,7 +25,7 @@ export async function process(
 		omniId?:string;
 		omniFrame?:number;
 		omniTotalFrames?:number;
-		watermarkPath?:string;
+		watermarkUrl?:string;
 	} = {}
 ) : Promise<ImageInfo> {
 	const isOmni = type=='omni';
@@ -56,8 +56,8 @@ export async function process(
 	// Remove the libvips-generated deepzoom meta file
 	await fs.rm(baseDir+'.dzi');
 
-	if(opts.watermarkPath || true)
-		await watermarkTiles(state, baseDir, opts.watermarkPath ?? 'micrio-watermark-30.png');
+	if(opts.watermarkUrl)
+		await watermarkTiles(state, baseDir, opts.watermarkUrl);
 
 	// Update status to Micrio
 	// `omniId` is only defined for the SECOND and later frames of an omni object
@@ -108,11 +108,11 @@ const tile = (state:State, destDir: string, file:string, format:FormatType) : Pr
 	}).catch(() => err('Could not read file: ' + file));
 });
 
-async function watermarkTiles(state:State, tilesDir:string, watermarkPath:string) {
+async function watermarkTiles(state:State, tilesDir:string, watermarkUrl:string) {
 	const allFilePaths = await walkSync(tilesDir);
 	const allImagePaths = allFilePaths.filter(f => f.match(/\.jpe?g|webp|jfif|png|pdf|tif$/));
 
-	const watermark = sharp(watermarkPath).png();
+	const watermark = sharp(Buffer.from(await fetch(watermarkUrl).then(resp => resp.arrayBuffer()))).png();
 
 	sharp.cache(false); // Disable sharp cache to avoid race conditions writing+reading to the same file
 

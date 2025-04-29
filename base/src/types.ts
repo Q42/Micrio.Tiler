@@ -83,3 +83,7 @@ export interface FSFile {
 	path: string;
 	buffer: Buffer|Uint8Array;
 }
+
+export interface GroupInfo {
+	watermarkUrl?: string;
+}

@@ -1,6 +1,7 @@
+import { IS_STAGING } from '../globals.js';
 import type { LoginStatusResult, UserToken } from '../types.js';
 
-const urlAccountBase = 'https://account.micr.io';
+const urlAccountBase = IS_STAGING ? 'https://account.micrio.dev' : 'https://account.micr.io';
 
 const to = (fn:(()=>any)|undefined,ms:number=1000) : Promise<void> => new Promise(ok => setTimeout(async () => {await fn?.();ok()}, ms));
 

@@ -7,12 +7,14 @@ import os from 'os';
 import path from 'path';
 import https from 'https';
 
-import { OMNI_PROCESSING_THREADS, PROCESSING_THREADS } from '../globals.js';
+import { IS_STAGING, OMNI_PROCESSING_THREADS, PROCESSING_THREADS } from '../globals.js';
 import { api } from '../lib/micrioApi.js';
 import { fsExists, jdToTime } from '../lib/utils.js';
 import { Uploader } from '../lib/uploader.js';
 import { process } from '../lib/tiler.js';
 import { getArchiveBin } from '../lib/archive.js';
+
+const imagePreviewBase = IS_STAGING ? 'https://i.micrio.dev' : 'https://i.micr.io';
 
 const setStatus = (state:State, status:string, override?:boolean, noLog?:boolean) => {
 	if(!state) return;
@@ -192,5 +194,5 @@ export async function upload(
 
 	setStatus(state, `${origImageNum ? 'Succesfully a' : 'A'}dded ${opts.type == 'omni' ? `a 360 object image (${origImageNum} frames)` : `${origImageNum} file${origImageNum==1?'':'s'}`} in ${Math.round(Date.now()-start)/1000}s.`);
 
-	if(singleImageResultId) setStatus(state, 'Resulting viewable URL: https://i.micr.io/'+singleImageResultId);
+	if(singleImageResultId) setStatus(state, `Resulting viewable URL: ${imagePreviewBase}/${singleImageResultId}`);
 }

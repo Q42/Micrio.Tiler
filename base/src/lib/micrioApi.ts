@@ -1,8 +1,9 @@
+import { IS_STAGING } from '../globals.js';
 import type { UserToken } from '../types.js';
 
 import https from 'https';
 
-const urlDashBase = 'https://dash.micr.io';
+const urlDashBase = IS_STAGING ? 'https://dash.micrio.dev' : 'https://dash.micr.io';
 
 /**
  * Talk with the Micrio dashboard CLI API (https://dash.micr.io/api/cli/*)

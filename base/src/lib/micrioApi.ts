@@ -9,14 +9,14 @@ const urlDashBase = IS_STAGING ? 'https://dash.micrio.dev' : 'https://dash.micr.
  * Talk with the Micrio dashboard CLI API (https://dash.micr.io/api/cli/*)
  * @see https://github.com:Q42/Micrio/server/dash.micr.io for the server code (Q42 only -- might open source one day)
  */
-export const api = <T>(account: UserToken, agent: https.Agent, path:string, data:Object = {}) : Promise<T|undefined> => new Promise((ok, err) => {
+export const api = <T>(account: UserToken, agent: https.Agent, method:'POST'|'GET', path:string, data:Object = {}) : Promise<T|undefined> => new Promise((ok, err) => {
 	if(!account) return err(new Error('Not logged in'));
 	const url = new URL(urlDashBase+'/api/cli'+path);
 	const blob = JSON.stringify(data);
 	const req = https.request({
 		host: url.host,
 		path: url.pathname+url.search,
-		method: 'POST',
+		method,
 		agent: agent,
 		headers: {
 			'Cookie': `.AspNetCore.Identity.Application=${account.base64};`,

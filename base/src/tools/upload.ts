@@ -43,12 +43,12 @@ export async function upload(
 	}
 
 	const folder = url.pathname;
-	const groupSlug = folder.split('/')[0];
+	const groupSlug = folder.replace(/^\//, '').split('/')[0];
 	const httpAgent = new https.Agent({rejectUnauthorized: true, keepAlive: true, timeout: 3000});
 
 	// Check if user has access to the requested destination folder
 	// This automatically throws an error if the user doesn't have access or the folder doesn't exist
-	const groupInfo: GroupInfo = await api(state.account, httpAgent, `/${groupSlug}/info`, );
+	const groupInfo: GroupInfo = await api(state.account, httpAgent, 'GET', `/${groupSlug}/info`, );
 
 	const start = Date.now();
 
@@ -131,7 +131,7 @@ export async function upload(
 		totalJobs+=document.length;
 
 		// Create a new Micrio PDF album in the specified folder
-		const pdfAlbum = await api<PDFAlbumResult>(state.account, uploader.agent, `${folder}/create`,{
+		const pdfAlbum = await api<PDFAlbumResult>(state.account, uploader.agent, 'POST', `${folder}/create`,{
 			name: encodeURIComponent(f),
 			type: 'pdf'
 		});
@@ -179,7 +179,7 @@ export async function upload(
 				path: omni?.id ? `${omni.id}/base.bin` : `g/${containerId}.${Math.floor(jdToTime(album.created)/1000)}.bin`,
 				blob: await getArchiveBin(outDir, opts.format, containerId, entries, omni?.id)
 			},
-			() => api(state.account, uploader.agent, `${folder}${album ? '/'+album.slug : ''}/@${omni.id || 'album'}/status`, { status: 4, albumVersion: album?.created })
+			() => api(state.account, uploader.agent, 'POST', `${folder}${album ? '/'+album.slug : ''}/@${omni.id || 'album'}/status`, { status: 4, albumVersion: album?.created })
 		]);
 	}
 

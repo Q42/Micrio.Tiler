@@ -108,39 +108,70 @@ const tile = (state:State, destDir: string, file:string, format:FormatType) : Pr
 	}).catch(() => err('Could not read file: ' + file));
 });
 
+type WatermarkPositionData = {
+	watermark:sharp.Sharp;
+	width:number;
+	height:number;
+	tileWidth:number;
+	tileHeight:number;
+}
+
 async function watermarkTiles(state:State, tilesDir:string, watermarkUrl:string) {
 	const allFilePaths = await walkSync(tilesDir);
 	const allImagePaths = allFilePaths.filter(f => f.match(/\.jpe?g|webp|jfif|png|pdf|tif$/));
 
-	const watermark = sharp(Buffer.from(await fetch(watermarkUrl).then(resp => resp.arrayBuffer()))).png();
+	const rotatedWatermark = sharp(
+		await sharp(Buffer.from(await fetch(watermarkUrl).then(resp => resp.arrayBuffer())))
+			.png()
+			.rotate(45, {background: {r:0,g:0,b:0,alpha:0}})
+			.toBuffer());
 
 	sharp.cache(false); // Disable sharp cache to avoid race conditions writing+reading to the same file
 
-	let counter = 0;
 	// We track the watermark size for each zoom level, so all tiles of the same zoom layer will always have the same size
-	const watermarkSizeByZoomLevel: Record<string, number> = {};
+	const watermarkPositionDataByZoomLevel: Record<string, WatermarkPositionData|null> = {};
 	// Loop through all images and watermark them
-	for (const filePath of allImagePaths) {
+	let counter = 0;
+	for(const filePath of allImagePaths) {
 		state.log(`Watermarking ${++counter} / ${allImagePaths.length}...`, true);
 
 		const zoomLevel = filePath.match(/[\\\/](\d+)[\\\/]\w+\.\w+$/)?.[1];
-		// const tilePath = path.join(tilesDir, filePath);
 		const tile = sharp(filePath);
-		const { width, height } = await tile.metadata();
+		const { width: tileWidth, height: tileHeight } = await tile.metadata();
 
-		const maxWatermarkDim = watermarkSizeByZoomLevel[zoomLevel] ??= Math.floor(Math.max(width, height) * .07);
-		if (maxWatermarkDim < 1) continue; // If watermark would be smaller than 1px, skip it
+		if(watermarkPositionDataByZoomLevel[zoomLevel] === undefined) {
+			const maxWatermarkDim = Math.floor(Math.max(tileWidth, tileHeight) * 0.5);
 
-		// Resize watermark if needed, or position as desired
+			// If watermark would be smaller than 1px, we set it to null to flag it as not needed
+			if(maxWatermarkDim < 1) {
+				watermarkPositionDataByZoomLevel[zoomLevel] = null;
+				continue;
+			}
+
+			let watermark = rotatedWatermark.clone()
+				.resize({width: maxWatermarkDim, height: maxWatermarkDim, fit: 'inside'})
+
+			const {width, height} = await sharp(await watermark.toBuffer()).metadata();
+
+			watermarkPositionDataByZoomLevel[zoomLevel] = {watermark, width, height, tileWidth, tileHeight};
+		}
+
+		const watermarkData = watermarkPositionDataByZoomLevel[zoomLevel];
+
+		if (watermarkData === null) continue;
+
+		const watermark = watermarkData.width <= tileWidth && watermarkData.height <= tileHeight
+			? watermarkData.watermark
+			: watermarkData.watermark.clone().extract({ left: 0, top: 0, width: Math.min(tileWidth, watermarkData.width), height: Math.min(tileHeight, watermarkData.height) });
+
 		const watermarked = await tile.webp()
-		  .composite([{
-			input: await watermark
-				.resize({width: maxWatermarkDim, height: maxWatermarkDim, fit: 'inside', })
-				.toBuffer(),
-			left: Math.floor(maxWatermarkDim * .2),
-			top: Math.floor(maxWatermarkDim * .2),
-		  }])
-		  .toBuffer();
+			.composite([{
+				input: await watermark.toBuffer(),
+				// Watermark is always centered in the 'normal' tile size, so if the tile is smaller, it will be cropped as if it were on the normal grid.
+				left: Math.floor((watermarkData.tileWidth - watermarkData.width) / 2),
+				top: Math.floor((watermarkData.tileHeight - watermarkData.height) / 2),
+			}])
+			.toBuffer();
   
 		await fs.writeFile(filePath, watermarked);
 	}

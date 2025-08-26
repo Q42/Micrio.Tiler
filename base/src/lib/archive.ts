@@ -76,5 +76,5 @@ function generateMDP(files:FSFile[]) : Blob {
 		arr.push(i.buffer);
 	});
 
-	return new Blob(arr, {type: 'application/octet-stream'});
+	return new Blob(arr as BlobPart[], {type: 'application/octet-stream'});
 }

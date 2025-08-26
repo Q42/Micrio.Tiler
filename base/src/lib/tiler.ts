@@ -101,5 +101,5 @@ const tile = (state:State, destDir: string, file:string, format:FormatType) : Pr
 			if(error||!info) err(error??'Could not tile image');
 			else ok(info);
 		})
-	}).catch(() => err('Could not read file: ' + file));
+	}).catch(e => err(e?.message ?? 'Could not read file'));
 });

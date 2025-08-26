@@ -112,7 +112,8 @@ export async function upload(
 			e => {
 				// If one omni frame or pdf page fails, everything fails
 				if(opts.type == 'omni' || _opts.pdfAlbum) throw e;
-				state.log(`Error: Could not tile ${fileName}: ${e?.message?.trim() ?? 'Unknown error'}`);
+				const message = e && typeof e == 'string' ? e : e?.message;
+				state.log(`Error: Could not tile ${fileName}: ${message?.trim() ?? 'Unknown error'}`);
 				origImageNum--;
 			}
 		)

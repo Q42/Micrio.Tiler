@@ -77,9 +77,9 @@ export async function process(
 
 /** Do the actual image tiling using Sharp (libvips) */
 const tile = (state:State, destDir: string, file:string, format:FormatType) : Promise<TileResult> => new Promise((ok, err) => {
-	fs.readFile(file).then(blob => {
-		if(state?.job) state.job.bytesSource += blob.byteLength;
-		sharp(blob, {
+	fs.stat(file).then(s => {
+		if(state?.job) state.job.bytesSource += s.size;
+		sharp(file, {
 			// Manual hard limit at 1,000,000 x 1,000,000 px
 			limitInputPixels: 1E6 * 1E6,
 			// By default, sharp has a low limit

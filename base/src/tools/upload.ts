@@ -160,6 +160,7 @@ export async function upload(
 	if(files.length) {
 		totalJobs+=files.length;
 		setStatus(state, 'Processing...', false, true);
+		if(files.length == 1) state?.log('Processing: ' + files[0]);
 		for(let i=0;i<files.length;i++) await addToQueue(files[i], opts.type == 'omni' || files.length == 1, { omniFrameIdx: i });
 	}
 

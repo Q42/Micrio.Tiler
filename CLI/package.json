@@ -32,7 +32,8 @@
 	"dependencies": {
 		"@micrio/tiler-base": "^0.1.18",
 		"commander": "^11.1.0",
-		"conf": "^12.0.0"
+		"conf": "^12.0.0",
+		"typescript": "^5.3.3"
 	},
 	"devDependencies": {
 		"@types/node": "^20.10.5"

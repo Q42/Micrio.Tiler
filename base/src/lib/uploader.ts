@@ -111,6 +111,7 @@ export class Uploader {
 			headers: {
 				'Content-Type': _blob ? 'application/octet-stream' : `image/${this.format}`,
 				'Content-Length': blob.byteLength,
+				'Cache-Control': 365*24*3600,
 			}
 		}, res => {
 			req.destroy();

@@ -51,7 +51,7 @@ export class Uploader {
 			.catch(e => { throw new Error('Upload error: '+(e.message ?? 'Upload permission denied')) })
 			.then(r => { if(!r) throw new Error('Upload permission denied.');
 				// After the request is completed, assign each file its signed upload URL
-				r.keys.forEach((sig,i) => this.uris[files[i]] = `https://${r.r2Base}.r2.cloudflarestorage.com/${sanitize(files[i], this.outDir)}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=${r.key}%2F${r.time.slice(0,8)}%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=${r.time}&X-Amz-Expires=300&X-Amz-Signature=${sig}&X-Amz-SignedHeaders=host&x-id=PutObject`);
+				r.keys.forEach((sig,i) => this.uris[files[i]] = `https://${r.r2Base}.r2.cloudflarestorage.com/${sanitize(files[i], this.outDir)}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=${r.key}%2F${r.time.slice(0,8)}%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=${r.time}&X-Amz-Expires=3600&X-Amz-Signature=${sig}&X-Amz-SignedHeaders=host&x-id=PutObject`);
 			});
 		// Until finished, assign the running promise as the upload url
 		files.forEach(f => this.uris[f] = call);

@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
 
 :root {
 	font-weight: 500;
@@ -76,7 +75,7 @@ h1 {
 	z-index: 1;
 }
 
-svg.svelte-fa.spinning {
+svg.spinning {
 	animation: spin 2s infinite linear;
 }
 

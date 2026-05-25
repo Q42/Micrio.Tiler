@@ -1,6 +1,6 @@
 {
 	"name": "@micrio/tiler-base",
-	"version": "0.1.20",
+	"version": "0.1.21",
 	"description": "The base Micrio client-side tiler package used by the Micrio CLI and GUI tools",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
@@ -28,12 +28,12 @@
 	"license": "MIT",
 	"author": "Marcel Duin <marcel@micr.io>",
 	"dependencies": {
-		"pdf-to-img": "^4.4.0",
-		"sharp": "^0.33.2"
+		"pdf-to-img": "^6.1.0",
+		"sharp": "^0.34.5"
 	},
 	"devDependencies": {
-		"@types/node": "^20.10.5",
-		"typescript": "^5.3.3"
+		"@types/node": "^25.9.1",
+		"typescript": "^6.0.3"
 	},
 	"prettier": {
 		"useTabs": true,

@@ -1,1 +1,4 @@
 .publish.md
+node_modules/
+dist/
+pnpm-lock.yaml

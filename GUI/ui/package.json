@@ -10,17 +10,18 @@
 		"check": "svelte-check --tsconfig ./tsconfig.json"
 	},
 	"devDependencies": {
-		"@fortawesome/free-solid-svg-icons": "^6.5.2",
-		"@sveltejs/vite-plugin-svelte": "^3.0.2",
-		"@tsconfig/svelte": "^5.0.2",
-		"autoprefixer": "^10.4.19",
-		"postcss": "^8.4.38",
-		"svelte": "^4.2.12",
-		"svelte-check": "^3.6.7",
-		"svelte-fa": "^4.0.2",
-		"tailwindcss": "^3.4.3",
-		"tslib": "^2.6.2",
-		"typescript": "^5.2.2",
-		"vite": "^5.2.0"
+		"@fortawesome/free-solid-svg-icons": "^7.2.0",
+		"@sveltejs/vite-plugin-svelte": "^7.1.2",
+		"@tailwindcss/postcss": "^4.3.0",
+		"@tsconfig/svelte": "^5.0.8",
+		"autoprefixer": "^10.5.0",
+		"postcss": "^8.5.15",
+		"svelte": "^5.55.9",
+		"svelte-check": "^4.4.8",
+		"svelte-fa": "^4.0.4",
+		"tailwindcss": "^4.3.0",
+		"tslib": "^2.8.1",
+		"typescript": "^6.0.3",
+		"vite": "^8.0.14"
 	}
 }

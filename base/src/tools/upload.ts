@@ -107,7 +107,8 @@ export async function upload(
 				// When the user uploaded a single omni, pdf or image, return the view URL after completion
 				if(saveId) singleImageResultId = r.id;
 				// When reading to create preview archive, add the image ID there
-				fileOutputDirs.get(omni?.id || _opts.pdfAlbum?.id)?.push([fileName, r]);
+				const dirKey = omni?.id || _opts.pdfAlbum?.id;
+				if(dirKey) fileOutputDirs.get(dirKey)?.push([fileName, r]);
 			},
 			e => {
 				// If one omni frame or pdf page fails, everything fails
@@ -136,6 +137,7 @@ export async function upload(
 			type: 'pdf'
 		});
 
+		if(!pdfAlbum) throw new Error('Could not create PDF album');
 		fileOutputDirs.set(pdfAlbum.id, []);
 		pdfAlbums.push(pdfAlbum);
 
@@ -177,10 +179,10 @@ export async function upload(
 		// Generate and upload the file and tell Micrio that the omni object or album is published
 		uploader.add([
 			{
-				path: omni?.id ? `${omni.id}/base.bin` : `g/${containerId}.${Math.floor(jdToTime(album.created)/1000)}.bin`,
+				path: omni?.id ? `${omni.id}/base.bin` : `g/${containerId}.${Math.floor(jdToTime(album?.created ?? 0)/1000)}.bin`,
 				blob: await getArchiveBin(outDir, opts.format, containerId, entries, omni?.id)
 			},
-			() => api(state.account, uploader.agent, `${folder}${album ? '/'+album.slug : ''}/@${omni.id || 'album'}/status`, { status: 4, albumVersion: album?.created })
+			() => api(state.account, uploader.agent, `${folder}${album ? '/'+album.slug : ''}/@${omni?.id || 'album'}/status`, { status: 4, albumVersion: album?.created })
 		]);
 	}
 
@@ -195,5 +197,5 @@ export async function upload(
 
 	setStatus(state, `${origImageNum ? 'Succesfully a' : 'A'}dded ${opts.type == 'omni' ? `a 360 object image (${origImageNum} frames)` : `${origImageNum} file${origImageNum==1?'':'s'}`} in ${Math.round(Date.now()-start)/1000}s.`);
 
-	if(singleImageResultId) setStatus(state, 'Resulting viewable URL: https://i.micr.io/'+singleImageResultId);
+	if(singleImageResultId) setStatus(state, 'Resulting viewable URL: https://viewer.micr.io/'+singleImageResultId);
 }

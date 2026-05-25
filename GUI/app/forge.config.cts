@@ -8,7 +8,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const rootDir = path.resolve(__dirname, '..', '..');
+const appDir = __dirname;
 
 const config: ForgeConfig = {
 	packagerConfig: {
@@ -93,14 +93,10 @@ const config: ForgeConfig = {
 					fs.rmSync(tmpDir, { recursive: true, force: true });
 				}
 
-				// 2. Inject production node_modules into resources/ alongside the asar
-				const nmDir = path.join(resDir, 'node_modules');
-				const deps = execSync('pnpm ls --prod --depth=Infinity --filter micrio-gui --parseable', {
-					cwd: rootDir, encoding: 'utf8',
-				}).trim().split('\n').filter(Boolean);
-
+				// 2. Copy production dependencies into resources/ alongside the asar
 				const platform = options.platform;
-				const seen = new Set<string>();
+				const nmDir = path.join(resDir, 'node_modules');
+				const appNm = path.resolve(appDir, 'node_modules');
 
 				const isNativeIncluded = (name:string) => {
 					const nativePlatforms = ['darwin', 'linux', 'linuxmusl', 'win32'];
@@ -112,28 +108,32 @@ const config: ForgeConfig = {
 					return true;
 				};
 
-				for (const dep of deps) {
-					let pkgName:string;
-					let sourceDir = '';
+				const copyPkg = (name:string, seen:Set<string>) => {
+					if (seen.has(name) || !isNativeIncluded(name)) return;
+					seen.add(name);
 
-					if (!dep.includes('/node_modules/') && dep.startsWith(rootDir)) {
-						pkgName = JSON.parse(fs.readFileSync(path.join(dep, 'package.json'), 'utf8')).name;
-						if (pkgName === 'micrio-gui') continue;
-						sourceDir = dep;
-					} else {
-						const idx = dep.lastIndexOf('/node_modules/');
-						pkgName = dep.slice(idx + 14);
-						const hoisted = path.join(rootDir, 'node_modules', pkgName);
-						if (fs.existsSync(hoisted)) sourceDir = hoisted;
-					}
+					const src = path.join(appNm, name);
+					if (!fs.existsSync(src)) return;
 
-					if (!sourceDir || seen.has(pkgName) || !isNativeIncluded(pkgName)) continue;
-					seen.add(pkgName);
+					const tgt = path.join(nmDir, name);
+					if (fs.existsSync(tgt)) return;
+					fs.mkdirSync(path.dirname(tgt), { recursive: true });
+					fs.cpSync(src, tgt, { recursive: true });
 
-					const targetPath = path.join(nmDir, pkgName);
-					if (fs.existsSync(targetPath)) continue;
-					fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-					fs.cpSync(sourceDir, targetPath, { recursive: true });
+					// Copy transitive deps (including optional deps for platform-specific packages)
+					try {
+						const pkg = JSON.parse(fs.readFileSync(path.join(src, 'package.json'), 'utf8'));
+						const allDeps = { ...pkg.dependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies };
+						for (const depName of Object.keys(allDeps)) {
+							copyPkg(depName, seen);
+						}
+					} catch {}
+				};
+
+				const pkgJson = JSON.parse(fs.readFileSync(path.resolve(appDir, 'package.json'), 'utf8'));
+				const seen = new Set<string>();
+				for (const depName of Object.keys(pkgJson.dependencies || {})) {
+					copyPkg(depName, seen);
 				}
 			}
 		}

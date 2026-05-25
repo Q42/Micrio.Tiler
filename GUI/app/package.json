@@ -7,7 +7,7 @@
 	"license": "MIT",
 	"type": "module",
 	"scripts": {
-		"build:ui": "pnpm --filter micrio-gui-ui build",
+		"build:ui": "cd ../ui && pnpm build",
 		"start": "pnpm build:ui && electron-forge start",
 		"package": "pnpm build:ui && electron-forge package",
 		"make": "pnpm build:ui && electron-forge make"
@@ -48,7 +48,7 @@
 		"vite": "^8.0.14"
 	},
 	"dependencies": {
-		"@micrio/tiler-base": "workspace:^",
+		"@micrio/tiler-base": "^0.1.21",
 		"electron-squirrel-startup": "^1.0.1",
 		"sharp": "^0.34.5"
 	}

@@ -6,16 +6,15 @@
 - Node.js 18+
 - `zip` — required to create distributable archives
 
-## Building
-
-From the repository root:
+## Quick start
 
 ```bash
-pnpm install
-pnpm build:gui
+cd GUI/ui && pnpm install
+cd ../app && pnpm install
+cd ../.. && pnpm build:gui
 ```
 
-This builds the Svelte UI, the Electron main process, and produces a distributable zip at `out/make/zip/linux/x64/`.
+This builds the Svelte UI, the Electron main process, and produces a distributable zip at `GUI/app/out/make/zip/linux/x64/`.
 
 ## Developing
 
@@ -30,11 +29,11 @@ cd GUI/app && pnpm start
 ## Packaging for other platforms
 
 ```bash
-# Windows x64
-pnpm run build:gui:win32
+# Windows x64 (run from repo root)
+cd GUI/ui && pnpm build && cd ../app && pnpm exec -- electron-forge make --arch x64 --platform win32
 
 # macOS universal (must build on a Mac)
-pnpm run build:gui:darwin
+cd GUI/ui && pnpm build && cd ../app && pnpm exec -- electron-forge make --arch universal --platform darwin
 ```
 
-`make` generates an installable package; `package` only bundles the compiled app without creating a distributable.
+`make` generates an installable package; `package` only bundles the compiled app.

@@ -1,5 +1,5 @@
 # Micrio tiler GUI
 
-The main app is made in the `./app` dir -- read the `README.md` there to get it up and running!
+The main app is in the `./app` directory — read the `README.md` there to get it up and running.
 
-The app frontend is in the `./ui` dir -- this is only a state-reactive frontend without any business logic.
+The app frontend is in the `./ui` directory — this is only a state-reactive Svelte UI without any business logic.

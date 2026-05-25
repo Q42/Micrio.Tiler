@@ -1,5 +1,4 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
-import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
@@ -17,7 +16,7 @@ const config: ForgeConfig = {
 		icon: './public/micrio',
 	},
 	rebuildConfig: {},
-	makers: [new MakerSquirrel({}), new MakerZIP({}, ['darwin', 'linux'])],
+	makers: [new MakerZIP({}, ['darwin', 'linux', 'win32'])],
 	plugins: [
 		new VitePlugin({
 			build: [

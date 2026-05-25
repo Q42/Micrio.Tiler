@@ -5,6 +5,8 @@
 		"build:base": "pnpm --filter @micrio/tiler-base build",
 		"build:cli": "pnpm --filter @micrio/cli build",
 		"build:gui-ui": "pnpm --filter micrio-gui-ui build",
-		"build:gui": "pnpm --filter micrio-gui-ui build && pnpm --filter micrio-gui make"
+		"build:gui": "pnpm --filter micrio-gui-ui build && pnpm --filter micrio-gui make",
+		"build:gui:win32": "pnpm --filter micrio-gui-ui build && pnpm --filter micrio-gui exec -- electron-forge make --arch x64 --platform win32",
+		"build:gui:darwin": "pnpm --filter micrio-gui-ui build && pnpm --filter micrio-gui exec -- electron-forge make --arch universal --platform darwin"
 	}
 }

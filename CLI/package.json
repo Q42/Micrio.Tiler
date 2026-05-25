@@ -30,7 +30,7 @@
 	"license": "MIT",
 	"author": "Marcel Duin <marcel@micr.io>",
 	"dependencies": {
-		"@micrio/tiler-base": "^0.1.20",
+		"@micrio/tiler-base": "workspace:*",
 		"commander": "^11.1.0",
 		"conf": "^12.0.0",
 		"typescript": "^5.3.3"

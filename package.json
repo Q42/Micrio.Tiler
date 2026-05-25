@@ -1,0 +1,10 @@
+{
+	"private": true,
+	"scripts": {
+		"build": "pnpm -r build",
+		"build:base": "pnpm --filter @micrio/tiler-base build",
+		"build:cli": "pnpm --filter @micrio/cli build",
+		"build:gui": "pnpm --filter micrio-gui build",
+		"build:gui-ui": "pnpm --filter micrio-gui-ui build"
+	}
+}

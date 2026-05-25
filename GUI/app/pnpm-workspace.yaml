@@ -4,3 +4,4 @@ minimumReleaseAgeExclude:
 allowBuilds:
   electron-winstaller: false
   sharp: false
+nodeLinker: 'hoisted'

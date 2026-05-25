@@ -49,7 +49,6 @@
 	},
 	"dependencies": {
 		"@micrio/tiler-base": "^0.1.21",
-		"electron-squirrel-startup": "^1.0.1",
 		"sharp": "^0.34.5"
 	}
 }

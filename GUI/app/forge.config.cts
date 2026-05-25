@@ -61,22 +61,20 @@ const config: ForgeConfig = {
 		}),
 	],
 	hooks: {
-		postPackage: async (forgeConfig:any, options:any) => {
-			const sourceDir = path.join('..','bin', '@img');
+		postPackage: async (_forgeConfig:any, options:any) => {
 			options.outputPaths.forEach((p:string) => {
-				const dir = options.platform == 'darwin' ?
-					path.join(p, 'micrio-gui.app', 'Contents', 'Resources', 'app.asar.unpacked', 'node_modules')
+				const dir = options.platform == 'darwin'
+					? path.join(p, 'micrio-gui.app', 'Contents', 'Resources', 'app.asar.unpacked', 'node_modules')
 					: path.join(p, 'resources', 'app.asar.unpacked', 'node_modules');
-				if(fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
-				fs.mkdirSync(dir);
 				const target = path.join(dir, '@img');
-				fs.mkdirSync(target);
-				fs.cpSync(sourceDir, target, {recursive: true});
 
-				// Remove all non-matching OS sharp binaries
-				getDirectories(target).filter(entry => !entry.match(options.platform)).forEach(entry =>
-					fs.rmSync(path.join(target, entry), {recursive: true, force: true})
-				);
+				// Copy @img platform packages from node_modules (follows pnpm symlinks)
+				fs.cpSync('node_modules/@img', target, { recursive: true, dereference: true });
+
+				// Remove all non-matching OS native binaries
+				getDirectories(target)
+					.filter(entry => !entry.match(options.platform))
+					.forEach(entry => fs.rmSync(path.join(target, entry), { recursive: true, force: true }));
 			});
 		}
 	}

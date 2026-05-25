@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { upload, UserToken, login } from '@micrio/tiler-base';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 import path from 'path';
 
 import { state } from './state.js';
@@ -21,11 +22,20 @@ if (require('electron-squirrel-startup')) {
 
 let mainWindow:BrowserWindow;
 
+const findIcon = () => {
+	const prodIcon = path.join(__dirname, '..', 'renderer', 'main_window', 'micrio.png');
+	if (fs.existsSync(prodIcon)) return prodIcon;
+	const devIcon = path.join(__dirname, '..', '..', 'public', 'micrio.png');
+	if (fs.existsSync(devIcon)) return devIcon;
+	return undefined;
+}
+
 const createWindow = (): void => {
 	// Create the browser window.
 	mainWindow = new BrowserWindow({
 		height: 600,
 		width: 800,
+		icon: findIcon(),
 		webPreferences: {
 			preload: path.join(__dirname, 'preload.mjs'),
 		},

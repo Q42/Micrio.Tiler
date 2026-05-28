@@ -1,7 +1,7 @@
-import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerZIP } from '@electron-forge/maker-zip';
-import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
+import { VitePlugin } from '@electron-forge/plugin-vite';
+import type { ForgeConfig } from '@electron-forge/shared-types';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
 import { execSync } from 'node:child_process';
@@ -46,16 +46,39 @@ const config: ForgeConfig = {
 			[FuseV1Options.EnableCookieEncryption]: true,
 			[FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
 			[FuseV1Options.EnableNodeCliInspectArguments]: false,
-			[FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
+			// app.asar is modified in postPackage, so embedded integrity hashes become stale.
+			[FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: false,
 			[FuseV1Options.OnlyLoadAppFromAsar]: true,
 		}),
 	],
 	hooks: {
-		postPackage: async (_forgeConfig:any, options:any) => {
+		postPackage: async (_forgeConfig: any, options: any) => {
 			for (const outputPath of options.outputPaths) {
-				const resDir = options.platform == 'darwin'
-					? path.join(outputPath, 'micrio-gui.app', 'Contents', 'Resources')
-					: path.join(outputPath, 'resources');
+				const resDir =
+					options.platform == 'darwin'
+						? (() => {
+								const appBundle = fs
+									.readdirSync(outputPath, {
+										withFileTypes: true,
+									})
+									.find(
+										(entry) =>
+											entry.isDirectory() &&
+											entry.name.endsWith('.app'),
+									);
+								if (!appBundle) {
+									throw new Error(
+										`No macOS .app bundle found in ${outputPath}`,
+									);
+								}
+								return path.join(
+									outputPath,
+									appBundle.name,
+									'Contents',
+									'Resources',
+								);
+							})()
+						: path.join(outputPath, 'resources');
 
 				const asarPath = path.join(resDir, 'app.asar');
 
@@ -64,32 +87,65 @@ const config: ForgeConfig = {
 					const tmpDir = path.join(resDir, '.asar-tmp');
 					fs.rmSync(tmpDir, { recursive: true, force: true });
 
-					execSync(`npx @electron/asar extract "${asarPath}" "${tmpDir}"`, { stdio: 'pipe' });
+					execSync(
+						`npx @electron/asar extract "${asarPath}" "${tmpDir}"`,
+						{ stdio: 'pipe' },
+					);
 
 					// Add UI dist bundle to the renderer output
 					const distSource = path.resolve(__dirname, 'dist');
 					if (fs.existsSync(distSource)) {
-						fs.cpSync(distSource, path.join(tmpDir, '.vite', 'renderer', 'main_window', 'dist'), { recursive: true });
+						fs.cpSync(
+							distSource,
+							path.join(
+								tmpDir,
+								'.vite',
+								'renderer',
+								'main_window',
+								'dist',
+							),
+							{ recursive: true },
+						);
 					}
 
 					// Fix loadFile path in main.js to point to the renderer's index.html
-					const mainJs = path.join(tmpDir, '.vite', 'build', 'main.js');
+					const mainJs = path.join(
+						tmpDir,
+						'.vite',
+						'build',
+						'main.js',
+					);
 					if (fs.existsSync(mainJs)) {
 						let code = fs.readFileSync(mainJs, 'utf8');
-						code = code.replace('loadFile("index.html")', 'loadFile(".vite/renderer/main_window/index.html")');
+						code = code.replace(
+							'loadFile("index.html")',
+							'loadFile(".vite/renderer/main_window/index.html")',
+						);
 						fs.writeFileSync(mainJs, code);
 					}
 
 					// Point index.html to the pre-built Tailwind CSS (Vite's renderer build strips custom classes)
-					const rendererHtml = path.join(tmpDir, '.vite', 'renderer', 'main_window', 'index.html');
+					const rendererHtml = path.join(
+						tmpDir,
+						'.vite',
+						'renderer',
+						'main_window',
+						'index.html',
+					);
 					if (fs.existsSync(rendererHtml)) {
 						let html = fs.readFileSync(rendererHtml, 'utf8');
-						html = html.replace(/href="\.\/assets\/[^"]+\.css"/, 'href="./dist/micrio.gui.ui.css"');
+						html = html.replace(
+							/href="\.\/assets\/[^"]+\.css"/,
+							'href="./dist/micrio.gui.ui.css"',
+						);
 						fs.writeFileSync(rendererHtml, html);
 					}
 
 					fs.rmSync(asarPath);
-					execSync(`npx @electron/asar pack "${tmpDir}" "${asarPath}"`, { stdio: 'pipe' });
+					execSync(
+						`npx @electron/asar pack "${tmpDir}" "${asarPath}"`,
+						{ stdio: 'pipe' },
+					);
 					fs.rmSync(tmpDir, { recursive: true, force: true });
 				}
 
@@ -98,17 +154,27 @@ const config: ForgeConfig = {
 				const nmDir = path.join(resDir, 'node_modules');
 				const appNm = path.resolve(appDir, 'node_modules');
 
-				const isNativeIncluded = (name:string) => {
-					const nativePlatforms = ['darwin', 'linux', 'linuxmusl', 'win32'];
-					const parts = name.replace(/^(@img|@napi-rs)\//, '').split('-');
+				const isNativeIncluded = (name: string) => {
+					const nativePlatforms = [
+						'darwin',
+						'linux',
+						'linuxmusl',
+						'win32',
+					];
+					const parts = name
+						.replace(/^(@img|@napi-rs)\//, '')
+						.split('-');
 					for (const part of parts) {
 						if (nativePlatforms.includes(part))
-							return part === platform || (platform === 'linux' && part === 'linuxmusl');
+							return (
+								part === platform ||
+								(platform === 'linux' && part === 'linuxmusl')
+							);
 					}
 					return true;
 				};
 
-				const copyPkg = (name:string, seen:Set<string>) => {
+				const copyPkg = (name: string, seen: Set<string>) => {
 					if (seen.has(name) || !isNativeIncluded(name)) return;
 					seen.add(name);
 
@@ -122,22 +188,36 @@ const config: ForgeConfig = {
 
 					// Copy transitive deps (including optional deps for platform-specific packages)
 					try {
-						const pkg = JSON.parse(fs.readFileSync(path.join(src, 'package.json'), 'utf8'));
-						const allDeps = { ...pkg.dependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies };
+						const pkg = JSON.parse(
+							fs.readFileSync(
+								path.join(src, 'package.json'),
+								'utf8',
+							),
+						);
+						const allDeps = {
+							...pkg.dependencies,
+							...pkg.optionalDependencies,
+							...pkg.peerDependencies,
+						};
 						for (const depName of Object.keys(allDeps)) {
 							copyPkg(depName, seen);
 						}
 					} catch {}
 				};
 
-				const pkgJson = JSON.parse(fs.readFileSync(path.resolve(appDir, 'package.json'), 'utf8'));
+				const pkgJson = JSON.parse(
+					fs.readFileSync(
+						path.resolve(appDir, 'package.json'),
+						'utf8',
+					),
+				);
 				const seen = new Set<string>();
 				for (const depName of Object.keys(pkgJson.dependencies || {})) {
 					copyPkg(depName, seen);
 				}
 			}
-		}
-	}
+		},
+	},
 };
 
 export default config;

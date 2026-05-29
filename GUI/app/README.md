@@ -32,8 +32,8 @@ cd GUI/app && pnpm start
 # Windows x64 (run from repo root)
 cd GUI/ui && pnpm build && cd ../app && pnpm exec -- electron-forge make --arch x64 --platform win32
 
-# macOS universal (must build on a Mac)
-cd GUI/ui && pnpm build && cd ../app && pnpm exec -- electron-forge make --arch universal --platform darwin
+# macOS arm64 .app bundle (must build on a Mac)
+cd GUI/ui && pnpm build && cd ../app && DEBUG=electron-forge:* pnpm exec -- electron-forge package --arch arm64 --platform darwin
 ```
 
 `make` generates an installable package; `package` only bundles the compiled app.

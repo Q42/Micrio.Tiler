@@ -48,7 +48,7 @@
 		"vite": "^8.0.14"
 	},
 	"dependencies": {
-		"@micrio/tiler-base": "^0.1.21",
+		"@micrio/tiler-base": "^0.1.23",
 		"sharp": "^0.34.5"
 	}
 }

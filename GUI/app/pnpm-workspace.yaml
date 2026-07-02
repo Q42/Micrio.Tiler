@@ -1,0 +1,7 @@
+blockExoticSubdeps: false
+minimumReleaseAgeExclude:
+  - '@micrio/tiler-base@0.1.21'
+allowBuilds:
+  electron-winstaller: false
+  sharp: false
+nodeLinker: 'hoisted'

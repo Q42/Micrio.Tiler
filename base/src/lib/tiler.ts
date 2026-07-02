@@ -40,7 +40,7 @@ export async function process(
 	if(!res) throw new Error('Could not create image in Micrio! Do you have the correct permissions?');
 
 	outDir = sanitize(outDir,outDir)
-	const baseDir = path.join(outDir, res.id, isOmni ? opts.omniFrame.toString() : '');
+	const baseDir = path.join(outDir, res.id, isOmni ? opts.omniFrame!.toString() : '');
 
 	const {width, height} = await tile(state, baseDir, f, format);
 	if(!height || !width) throw new Error('Could not read image dimensions');

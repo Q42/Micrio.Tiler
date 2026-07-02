@@ -18,7 +18,7 @@ export default defineConfig((env) => {
           // https://github.com/electron-vite/vite-plugin-electron/blob/v0.28.5/src/simple.ts#L56-L82
           format: 'cjs',
           // It should not be split chunks.
-          inlineDynamicImports: true,
+          codeSplitting: false,
           entryFileNames: `[name].${ext}`,
           chunkFileNames: `[name].${ext}`,
           assetFileNames: '[name].[ext]',

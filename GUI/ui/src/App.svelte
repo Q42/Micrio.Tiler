@@ -8,7 +8,7 @@
 
 	import { faArrowLeft, faArrowRight, faArrowRightToBracket, faCheck, faCheckCircle, faCopy, faExclamationTriangle, faMicrochip, faRotateLeft, faSpinner, faXmark } from '@fortawesome/free-solid-svg-icons';
 
-	import Fa from 'svelte-fa';
+	import Fa from './components/Fa.svelte';
 
 	import Logo from './components/Logo.svelte';
 	import Progress from './components/Progress.svelte';
@@ -64,7 +64,7 @@
 	//if(isDev) window.__uploader = Dev;
 
 	const buttonClass = `rounded-8px h-[46px] text-center inline-block whitespace-pre border-transparent border-[1px] px-24px py-10px font-semibold transition-all bg-[#1a1a1a] hover:border-green-500 hover:text-green-500 min-w-[120px] disabled:opacity-50 disabled:pointer-events-none`;
-	const selectClass = `w-[400px] rounded-8px px-12px py-10px border-transparent focus:border-green-500 border-[1px] overflow-hidden`;
+	const selectClass = `w-[400px] rounded-8px px-12px py-10px border-transparent focus:border-green-500 border-[1px] overflow-hidden text-white bg-black-800`;
 	const h4Class = 'text-black-400 text-small uppercase mb-4px mt-16px';
 
 	$:percFiles = $state?.job ? $state.job.numProcessed / $state.files.length : 0;
@@ -141,7 +141,7 @@
 							Refresh the folder in your dashboard to see the results.
 						</p>
 					</div>
-					<button disabled={!$state.files.length} class={buttonClass} on:click={() => API.emit('reset')}>Add more... <Fa class="inline-block ml-8px" icon={faRotateLeft} /></button>
+					<button class={buttonClass} on:click={() => API.emit('reset')}>Add more... <Fa class="inline-block ml-8px" icon={faRotateLeft} /></button>
 				{/if}
 			{/if}
 		{:else if !$state.account}

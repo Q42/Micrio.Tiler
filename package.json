@@ -1,0 +1,16 @@
+{
+	"private": true,
+	"scripts": {
+		"build:base": "cd base && pnpm build",
+		"build:cli": "cd CLI && pnpm build",
+		"build:gui-ui": "cd GUI/ui && pnpm build",
+		"build:gui": "cd GUI/ui && pnpm build && cd ../app && pnpm make",
+		"build:gui:win32": "cd GUI/ui && pnpm build && cd ../app && pnpm exec -- electron-forge make --arch x64 --platform win32",
+		"build:gui:darwin": "cd GUI/ui && pnpm build && cd ../app && DEBUG=electron-forge:* pnpm exec -- electron-forge package --arch arm64 --platform darwin"
+	},
+	"prettier": {
+		"singleQuote": true,
+		"useTabs": true,
+		"tabWidth": 4
+	}
+}

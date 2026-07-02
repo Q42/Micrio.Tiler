@@ -1,16 +1,16 @@
 {
 	"name": "micrio-gui",
 	"productName": "Micrio",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Graphical User Interface for processing and uploading images to Micrio",
 	"main": ".vite/build/main.js",
 	"license": "MIT",
 	"type": "module",
 	"scripts": {
-		"start": "electron-forge start",
-		"package": "electron-forge package",
-		"make": "electron-forge make",
-		"install-sharp": "node sharp-install.js"
+		"build:ui": "cd ../ui && pnpm build",
+		"start": "pnpm build:ui && electron-forge start",
+		"package": "pnpm build:ui && electron-forge package",
+		"make": "pnpm build:ui && electron-forge make"
 	},
 	"author": "Marcel Duin <marcel@micr.io>",
 	"keywords": [
@@ -18,37 +18,37 @@
 		"gui"
 	],
 	"bugs": {
-		"url": "https://github.com/marcelduin/Micrio.GUI"
+		"url": "https://github.com/Q42/Micrio.Tiler"
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/marcelduin/Micrio.GUI.git"
+		"url": "https://github.com/Q42/Micrio.Tiler.git"
 	},
 	"devDependencies": {
-		"@electron-forge/cli": "^7.4.0",
-		"@electron-forge/maker-deb": "^7.4.0",
-		"@electron-forge/maker-rpm": "^7.4.0",
-		"@electron-forge/maker-squirrel": "^7.4.0",
-		"@electron-forge/maker-zip": "^7.4.0",
-		"@electron-forge/plugin-auto-unpack-natives": "^7.4.0",
-		"@electron-forge/plugin-fuses": "^7.4.0",
-		"@electron-forge/plugin-vite": "^7.4.0",
-		"@electron/fuses": "^1.8.0",
-		"electron": "30.0.1",
-		"ts-node": "^10.0.0",
-		"typescript": "~4.5.4",
-		"vite": "^5.0.12"
+		"@electron-forge/cli": "^7.11.2",
+		"@electron-forge/maker-deb": "^7.11.2",
+		"@electron-forge/maker-rpm": "^7.11.2",
+		"@electron-forge/maker-squirrel": "^7.11.2",
+		"@electron-forge/maker-zip": "^7.11.2",
+		"@electron-forge/plugin-auto-unpack-natives": "^7.11.2",
+		"@electron-forge/plugin-fuses": "^7.11.2",
+		"@electron-forge/plugin-vite": "^7.11.2",
+		"@electron/fuses": "^2.1.1",
+		"@img/sharp-darwin-arm64": "^0.34.5",
+		"@img/sharp-darwin-x64": "^0.34.5",
+		"@img/sharp-linux-arm": "^0.34.5",
+		"@img/sharp-linux-arm64": "^0.34.5",
+		"@img/sharp-linux-x64": "^0.34.5",
+		"@img/sharp-linuxmusl-arm64": "^0.34.5",
+		"@img/sharp-linuxmusl-x64": "^0.34.5",
+		"@img/sharp-win32-x64": "^0.34.5",
+		"electron": "42.2.0",
+		"ts-node": "^10.9.2",
+		"typescript": "~6.0.3",
+		"vite": "^8.0.14"
 	},
 	"dependencies": {
-		"@micrio/tiler-base": "^0.1.17",
-		"electron-squirrel-startup": "^1.0.0",
-		"sharp": "^0.33.5"
-	},
-	"build": {
-		"asar": true,
-		"asarUnpack": [
-			"**/node_modules/sharp/**/*",
-			"**/node_modules/@img/**/*"
-		]
+		"@micrio/tiler-base": "^0.1.21",
+		"sharp": "^0.34.5"
 	}
 }

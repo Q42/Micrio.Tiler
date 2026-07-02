@@ -1,21 +1,39 @@
 # Micrio Uploader GUI
 
-## Installing
-1. Run `pnpm i`
-2. Run `npm run install-sharp` to install all cross-platform binaries for the `sharp` package
-3. Create a `bin/@img` directory in this parent directory (`../`)
-4. Copy the contents of `./node_modules/@img/` to `../bin/@img`
-5. Remove all directories in `./node_modules/@img/` that are not for your own development platform
+## Prerequisites
+
+- [pnpm](https://pnpm.io/) 10+
+- Node.js 18+
+- `zip` — required to create distributable archives
+
+## Quick start
+
+```bash
+cd GUI/ui && pnpm install
+cd ../app && pnpm install
+cd ../.. && pnpm build:gui
+```
+
+This builds the Svelte UI, the Electron main process, and produces a distributable zip at `GUI/app/out/make/zip/linux/x64/`.
 
 ## Developing
-1. UI only: run `npm run dev` in `../ui`
-2. Make sure to build the UI for every change: `npm run build` in `../ui`
-3. Developing app: `npm run start`
 
-## Building
+```bash
+# Terminal 1: UI dev server (hot-reload)
+cd GUI/ui && pnpm dev
 
-1. Make sure the UI is built and you have at least ran `npm run start` once
-2. For Windows, do `npm run [make|package] -- --arch x64 --platform win32`
-3. For Mac compiler target, you need to be on a Mac! Do `npm run [make|package] -- --arch universal --platform darwin`. This builds a single app for both `x64` and `arm64`.
+# Terminal 2: Electron app (connects to UI dev server)
+cd GUI/app && pnpm start
+```
 
-`npm run make` generates an entire installable single executable file, where `npm run package` only makes the bundled compiled program.
+## Packaging for other platforms
+
+```bash
+# Windows x64 (run from repo root)
+cd GUI/ui && pnpm build && cd ../app && pnpm exec -- electron-forge make --arch x64 --platform win32
+
+# macOS arm64 .app bundle (must build on a Mac)
+cd GUI/ui && pnpm build && cd ../app && DEBUG=electron-forge:* pnpm exec -- electron-forge package --arch arm64 --platform darwin
+```
+
+`make` generates an installable package; `package` only bundles the compiled app.

@@ -24,15 +24,15 @@ jobs:
           # macOS
           - runner-os: macos-latest
             target: darwin
-            output-file: GUI/out/make/zip/darwin/arm64/Micrio-darwin-arm64-0.3.0.zip
+            output-file: GUI/out/make/zip/darwin/arm64/Micrio-darwin-arm64-*.zip
           # Windows
           - runner-os: windows-latest
             target: win32
-            output-file: GUI/out/make/zip/win32/x64/Micrio-win32-x64-0.3.0.zip
+            output-file: GUI/out/make/zip/win32/x64/Micrio-win32-x64-*.zip
           # Linux
           - runner-os: ubuntu-latest
             target: linux
-            output-file: GUI/out/make/zip/linux/x64/Micrio-linux-x64-0.3.0.zip
+            output-file: GUI/out/make/zip/linux/x64/Micrio-linux-x64-*.zip
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.runner-os }}
     steps:

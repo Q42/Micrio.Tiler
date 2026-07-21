@@ -33,6 +33,7 @@ jobs:
           - runner-os: ubuntu-latest
             target: linux
             output-file: GUI/out/make/zip/linux/x64/Micrio-linux-x64-0.3.0.zip
+    name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.runner-os }}
     steps:
       - uses: actions/checkout@v7

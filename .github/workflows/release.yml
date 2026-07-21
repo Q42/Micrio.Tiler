@@ -21,13 +21,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            make: make:darwin
-          - os: windows-latest
-            make: make:win32
-          - os: ubuntu-latest
-            make: make:linux
-    runs-on: ${{ matrix.os }}
+          # macOS
+          - runner-os: macos-latest
+            target: darwin
+            output-file: GUI/out/make/zip/darwin/arm64/Micrio-darwin-arm64-0.3.0.zip
+          # Windows
+          - runner-os: windows-latest
+            target: win32
+            output-file: GUI/out/make/zip/win32/x64/Micrio-win32-x64-0.3.0.zip
+          # Linux
+          - runner-os: ubuntu-latest
+            target: linux
+            output-file: GUI/out/make/zip/linux/x64/Micrio-linux-x64-0.3.0.zip
+    runs-on: ${{ matrix.runner-os }}
     steps:
       - uses: actions/checkout@v7
 
@@ -42,38 +48,35 @@ jobs:
         working-directory: GUI
 
       - name: Install code signing certificate
-        if: matrix.os == 'macos-latest'
+        if: matrix.runner-os == 'macos-latest'
         uses: q42/actions/install-certificate@v1
         with:
           build-certificate-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           certificate-password: ${{ secrets.BUILD_CERTIFICATE_PASSWORD }}
 
       - name: Install App Store Connect API key
-        if: matrix.os == 'macos-latest'
+        if: matrix.runner-os == 'macos-latest'
+        id: app-store-connect-key
         run: |
           APP_STORE_CONNECT_API_KEY_PATH="${{ runner.temp }}/AuthKey.p8"
-          echo "APP_STORE_CONNECT_API_KEY_PATH=$APP_STORE_CONNECT_API_KEY_PATH" >> $GITHUB_ENV
+          echo "path=$APP_STORE_CONNECT_API_KEY_PATH" >> "$GITHUB_OUTPUT"
           echo -n "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | base64 --decode -o "$APP_STORE_CONNECT_API_KEY_PATH"
 
       - name: Build
-        run: pnpm ${{ matrix.make }}
+        run: pnpm make:${{ matrix.target }}
         env:
-          APPLE_API_KEY: ${{ env.APP_STORE_CONNECT_API_KEY_PATH }}
+          APPLE_API_KEY: ${{ steps.app-store-connect-key.outputs.path }}
           APPLE_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
 
       - uses: actions/upload-artifact@v7
         with:
-          name: micrio-${{ matrix.os }}
-          path: |
-            GUI/out/make/**/*.dmg
-            GUI/out/make/**/*.zip
+          path: ${{ matrix.output-file }}
+          archive: false
 
       - name: Attach to GitHub Release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v3
         with:
           draft: true
-          files: |
-            GUI/out/make/**/*.dmg
-            GUI/out/make/**/*.zip
+          files: ${{ matrix.output-file }}

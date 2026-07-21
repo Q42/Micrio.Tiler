@@ -1,4 +1,3 @@
-import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { VitePlugin } from '@electron-forge/plugin-vite';
@@ -104,7 +103,6 @@ const config: ForgeConfig = {
 	rebuildConfig: {},
 	makers: [
 		new MakerZIP({}, ['darwin', 'linux', 'win32']),
-		new MakerDMG({}, ['darwin']),
 	],
 	plugins: [
 		new VitePlugin({

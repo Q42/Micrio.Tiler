@@ -3,8 +3,5 @@ minimumReleaseAgeExclude:
   - '@micrio/tiler-base@0.1.21'
 allowBuilds:
   electron-winstaller: false
-  # Native deps of @electron-forge/maker-dmg, needed to build the macOS DMG.
-  fs-xattr: true
-  macos-alias: true
   sharp: false
 nodeLinker: 'hoisted'

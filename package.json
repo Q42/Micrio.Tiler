@@ -1,12 +1,12 @@
 {
 	"private": true,
+	"packageManager": "pnpm@11.15.1",
 	"scripts": {
 		"build:base": "cd base && pnpm build",
 		"build:cli": "cd CLI && pnpm build",
-		"build:gui-ui": "cd GUI/ui && pnpm build",
-		"build:gui": "cd GUI/ui && pnpm build && cd ../app && pnpm make",
-		"build:gui:win32": "cd GUI/ui && pnpm build && cd ../app && pnpm exec -- electron-forge make --arch x64 --platform win32",
-		"build:gui:darwin": "cd GUI/ui && pnpm build && cd ../app && DEBUG=electron-forge:* pnpm exec -- electron-forge package --arch arm64 --platform darwin"
+		"make:darwin": "cd GUI/app && pnpm exec -- electron-forge make --platform=darwin --arch=arm64",
+		"make:win32": "cd GUI/app && pnpm exec -- electron-forge make --platform=win32 --arch=x64",
+		"make:linux": "cd GUI/app && pnpm exec -- electron-forge make --platform=linux --arch=x64"
 	},
 	"prettier": {
 		"singleQuote": true,

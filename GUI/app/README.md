@@ -1,5 +1,8 @@
 # Micrio Uploader GUI
 
+An Electron desktop app with a Svelte + Tailwind frontend. Electron Forge builds
+the Svelte app in `src/renderer` as the app's renderer process (no separate UI build).
+
 ## Prerequisites
 
 - [pnpm](https://pnpm.io/) 10+
@@ -9,31 +12,32 @@
 ## Quick start
 
 ```bash
-cd GUI/ui && pnpm install
-cd ../app && pnpm install
-cd ../.. && pnpm build:gui
+pnpm install
+cd ../.. && pnpm make:darwin   # or make:win32 / make:linux
 ```
 
-This builds the Svelte UI, the Electron main process, and produces a distributable zip at `GUI/app/out/make/zip/linux/x64/`.
+Produces a distributable under `GUI/app/out/make/`.
 
 ## Developing
 
 ```bash
-# Terminal 1: UI dev server (hot-reload)
-cd GUI/ui && pnpm dev
-
-# Terminal 2: Electron app (connects to UI dev server)
-cd GUI/app && pnpm start
+pnpm start   # Electron app with renderer hot-reload
 ```
 
-## Packaging for other platforms
+## Packaging
 
 ```bash
-# Windows x64 (run from repo root)
-cd GUI/ui && pnpm build && cd ../app && pnpm exec -- electron-forge make --arch x64 --platform win32
-
-# macOS arm64 .app bundle (must build on a Mac)
-cd GUI/ui && pnpm build && cd ../app && DEBUG=electron-forge:* pnpm exec -- electron-forge package --arch arm64 --platform darwin
+# From the repo root, on the matching OS:
+pnpm make:darwin   # macOS arm64 (.dmg + .zip)
+pnpm make:win32    # Windows x64 (.zip)
+pnpm make:linux    # Linux x64 (.zip)
 ```
 
-`make` generates an installable package; `package` only bundles the compiled app.
+`make` generates the distributable; `pnpm package` only bundles the compiled `.app`
+without a maker.
+
+## Code signing
+
+macOS builds are code-signed + notarized in CI (see `.github/workflows/release.yml`).
+Signing runs automatically when the `APPLE_API_KEY_ID` env var is present; local builds
+without it produce an unsigned app. Windows and Linux builds are unsigned.

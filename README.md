@@ -8,7 +8,7 @@ Learn more about Micrio at https://micr.io/
 
 - `base` The [`@micrio/tiler-base`](https://www.npmjs.com/package/@micrio/tiler-base) package — client-side tiler library.
 - `CLI` The [`@micrio/cli`](https://www.npmjs.com/package/@micrio/cli) command-line tool to process and upload images to your Micrio account.
-- `GUI/app` The graphical user interface: an Electron desktop app with a Svelte + Tailwind frontend (built by Electron Forge as the app's renderer).
+- `GUI` The graphical user interface: an Electron desktop app with a Svelte + Tailwind frontend (built by Electron Forge as the app's renderer).
 
 ## Building the CLI
 
@@ -21,7 +21,7 @@ pnpm build
 ## Building the GUI
 
 ```bash
-cd GUI/app && pnpm install
+cd GUI && pnpm install
 cd ../.. && pnpm make:darwin   # or make:win32 / make:linux
 ```
 
@@ -35,7 +35,7 @@ pnpm make:win32   # build+package the Windows GUI (x64)
 pnpm make:linux   # build+package the Linux GUI (x64)
 ```
 
-The GUI output is at `GUI/app/out/make/`. Each `make:*` target must run on its own OS.
+The GUI output is at `GUI/out/make/`. Each `make:*` target must run on its own OS.
 
 ## Releasing the GUI
 

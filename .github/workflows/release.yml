@@ -39,7 +39,7 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
-        working-directory: GUI/app
+        working-directory: GUI
 
       - name: Install code signing certificate
         if: matrix.os == 'macos-latest'
@@ -66,8 +66,8 @@ jobs:
         with:
           name: micrio-${{ matrix.os }}
           path: |
-            GUI/app/out/make/**/*.dmg
-            GUI/app/out/make/**/*.zip
+            GUI/out/make/**/*.dmg
+            GUI/out/make/**/*.zip
 
       - name: Attach to GitHub Release
         if: github.ref_type == 'tag'
@@ -75,5 +75,5 @@ jobs:
         with:
           draft: true
           files: |
-            GUI/app/out/make/**/*.dmg
-            GUI/app/out/make/**/*.zip
+            GUI/out/make/**/*.dmg
+            GUI/out/make/**/*.zip

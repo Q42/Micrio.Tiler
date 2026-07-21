@@ -4,9 +4,9 @@
 	"scripts": {
 		"build:base": "cd base && pnpm build",
 		"build:cli": "cd CLI && pnpm build",
-		"make:darwin": "cd GUI/app && pnpm exec -- electron-forge make --platform=darwin --arch=arm64",
-		"make:win32": "cd GUI/app && pnpm exec -- electron-forge make --platform=win32 --arch=x64",
-		"make:linux": "cd GUI/app && pnpm exec -- electron-forge make --platform=linux --arch=x64"
+		"make:darwin": "cd GUI && pnpm exec -- electron-forge make --platform=darwin --arch=arm64",
+		"make:win32": "cd GUI && pnpm exec -- electron-forge make --platform=win32 --arch=x64",
+		"make:linux": "cd GUI && pnpm exec -- electron-forge make --platform=linux --arch=x64"
 	},
 	"prettier": {
 		"singleQuote": true,

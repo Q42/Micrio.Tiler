@@ -22,7 +22,7 @@ pnpm build
 
 ```bash
 cd GUI && pnpm install
-cd ../.. && pnpm make:darwin   # or make:win32 / make:linux
+cd .. && pnpm make:darwin   # or make:win32 / make:linux
 ```
 
 Root scripts:

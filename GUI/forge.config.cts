@@ -71,19 +71,19 @@ const copyProdDeps = (buildPath: string, platform: string, arch: string) => {
 	for (const dep of Object.keys(rootPkg.dependencies || {})) copy(dep);
 };
 
-// macOS signing + notarization only runs when the App Store Connect API key
-// env is present (CI on a macOS runner). Local/dev builds skip it and produce
-// an unsigned app.
-const macSigning = process.env.APPLE_API_KEY_ID
-	? {
-			osxSign: {},
-			osxNotarize: {
-				appleApiKey: process.env.APPLE_API_KEY!,
-				appleApiKeyId: process.env.APPLE_API_KEY_ID!,
-				appleApiIssuer: process.env.APPLE_API_ISSUER!,
-			},
-		}
-	: {};
+const macSigning =
+	process.env.APPLE_API_KEY &&
+	process.env.APPLE_API_KEY_ID &&
+	process.env.APPLE_API_ISSUER
+		? {
+				osxSign: {},
+				osxNotarize: {
+					appleApiKey: process.env.APPLE_API_KEY,
+					appleApiKeyId: process.env.APPLE_API_KEY_ID,
+					appleApiIssuer: process.env.APPLE_API_ISSUER,
+				},
+			}
+		: {};
 
 const config: ForgeConfig = {
 	packagerConfig: {

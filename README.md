@@ -8,8 +8,7 @@ Learn more about Micrio at https://micr.io/
 
 - `base` The [`@micrio/tiler-base`](https://www.npmjs.com/package/@micrio/tiler-base) package — client-side tiler library.
 - `CLI` The [`@micrio/cli`](https://www.npmjs.com/package/@micrio/cli) command-line tool to process and upload images to your Micrio account.
-- `GUI/app` The graphical user interface (Electron desktop app).
-- `GUI/ui` The Svelte frontend for the desktop app.
+- `GUI` The graphical user interface: an Electron desktop app with a Svelte + Tailwind frontend (built by Electron Forge as the app's renderer).
 
 ## Building the CLI
 
@@ -22,29 +21,29 @@ pnpm build
 ## Building the GUI
 
 ```bash
-# 1. Build the base library (also needed by CLI)
-cd base && pnpm install && pnpm build
-
-# 2. Install GUI dependencies
-cd ../GUI/ui && pnpm install
-cd ../app && pnpm install
-
-# 3. Build the distributable
-cd ../.. && pnpm build:gui
+cd GUI && pnpm install
+cd .. && pnpm make:darwin   # or make:win32 / make:linux
 ```
 
-Or use the root scripts (each project must have its dependencies installed first):
+Root scripts:
 
 ```bash
-pnpm build:base        # build base library
-pnpm build:cli         # build CLI
-pnpm build:gui         # build Linux GUI zip
-pnpm build:gui:win32   # build Windows x64 GUI
-pnpm build:gui:darwin  # build macOS universal GUI (must run on a Mac)
+pnpm build:base   # build base library
+pnpm build:cli    # build CLI
+pnpm make:darwin  # build+package the macOS GUI (arm64; signed+notarized in CI)
+pnpm make:win32   # build+package the Windows GUI (x64)
+pnpm make:linux   # build+package the Linux GUI (x64)
 ```
 
-The GUI output is at `GUI/app/out/make/`.
+The GUI output is at `GUI/out/make/`. Each `make:*` target must run on its own OS.
+
+## Releasing the GUI
+
+Signed macOS builds are produced by CI, not by hand. Push a `gui-v*` tag (e.g. `gui-v0.3.0`)
+and the `.github/workflows/release.yml` workflow builds all three platforms and attaches them
+to a draft GitHub Release. macOS is code-signed + notarized (Developer ID); Windows and Linux
+are unsigned. See the workflow file for the required signing secrets.
 
 ### Build dependencies
 
-- `zip` — required by all `build:gui:*` commands to create distributable archives
+- `zip` — required by the zip maker to create distributable archives

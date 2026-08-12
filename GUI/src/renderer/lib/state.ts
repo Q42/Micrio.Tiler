@@ -1,4 +1,4 @@
-import type { UIState } from '../../../app/src/types';
+import type { UIState } from '../../types';
 
 import { writable, type Writable } from 'svelte/store';
 import { API } from './api';

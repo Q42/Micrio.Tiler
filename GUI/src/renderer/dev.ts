@@ -1,4 +1,4 @@
-import type { UIState } from '../../app/src/types';
+import type { UIState } from '../types';
 
 import { state } from './lib/state';
 

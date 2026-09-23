@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@micrio/tiler-base':
-        specifier: ^0.1.23
-        version: 0.1.23
+        specifier: ^0.1.24
+        version: 0.1.24
       commander:
         specifier: ^14.0.3
         version: 14.0.3
@@ -167,8 +167,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@micrio/tiler-base@0.1.23':
-    resolution: {integrity: sha512-ALvpX7e/CfjGMdI4TemWXRWDOp+ag7HSEqRAyFb6IrqVtGCFRIRKznDZEHo4cxfkP9mwXu11qJ4ebAxeXIennA==}
+  '@micrio/tiler-base@0.1.24':
+    resolution: {integrity: sha512-o9ZCJ34kIFipVggTmRTKZGOubVxdrsqXtpXwCrMs8879a+avw3d/2XoHMhKiibO80wWQ6lOGKn1T+CQhmuETDQ==}
     engines: {node: '>=18.17.0'}
 
   '@napi-rs/canvas-android-arm64@0.1.100':
@@ -458,7 +458,7 @@ snapshots:
   '@img/sharp-win32-x64@0.34.5':
     optional: true
 
-  '@micrio/tiler-base@0.1.23':
+  '@micrio/tiler-base@0.1.24':
     dependencies:
       pdf-to-img: 6.2.0
       sharp: 0.34.5

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Folder } from '../../../app/src/types';
+	import type { Folder } from '../../types';
 
 	export let folders:Folder[] = [];
 	export let baseSlug:string = '';

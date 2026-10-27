@@ -13,3 +13,18 @@ For (experimental) PDF support, Mozilla's [`PDFjs`](https://www.npmjs.com/packag
 ## Acknowledgements
 
 * [Erwin Verbruggen](https://github.com/verwinv) for rigorous testing
+
+## Server-side usage
+
+The tiling and upload primitives are also exposed for server-side tilers. Pass a signed URL provider to `Uploader` when the caller manages storage credentials itself:
+
+```ts
+import { Uploader, processExisting } from '@micrio/tiler-base';
+
+const uploader = new Uploader(agent, { log }, '', format, outDir, {
+	getUploadUrls: files => signUploadUrls(files),
+});
+
+await processExisting(uploader, micrioId, originalPath, outDir, format);
+await uploader.complete();
+```

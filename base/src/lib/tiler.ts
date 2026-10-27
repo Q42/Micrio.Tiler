@@ -25,6 +25,10 @@ export async function process(
 		omniId?:string;
 		omniFrame?:number;
 		omniTotalFrames?:number;
+		/** Tile an existing image under this ID and skip create/final status */
+		id?:string;
+		/** Use this callback for the status-6 update instead of the dashboard API */
+		setStatus?:(id:string, data:{status:number; width?:number; height?:number; format?:FormatType; length?:number}) => void|Promise<void>;
 	} = {}
 ) : Promise<ImageInfo> {
 	const isOmni = type=='omni';
@@ -34,7 +38,7 @@ export async function process(
 
 	const fName = isPdfPage ? path.basename(f).replace(/\.(tif|png)$/,'') : path.basename(f);
 
-	const res = opts.omniId ? {id: opts.omniId} : await api<{id:string}>(state.account, uploader.agent, `${folder}/create`,{
+	const res = opts.id ? {id: opts.id} : opts.omniId ? {id: opts.omniId} : await api<{id:string}>(state.account!, uploader.agent, `${folder}/create`,{
 		name: encodeURIComponent(fName), type, format
 	});
 	if(!res) throw new Error('Could not create image in Micrio! Do you have the correct permissions?');
@@ -48,9 +52,9 @@ export async function process(
 	// Update status to Micrio
 	// `omniId` is only defined for the SECOND and later frames of an omni object
 	// So the first frame of an omni object will do this call.
-	if(!opts.omniId) await api(state.account, uploader.agent, `${folder}/@${res.id}/status`, {
-		width, height, status: 6, format, length: opts.omniTotalFrames
-	});
+	const status6 = { width, height, status: 6, format, length: opts.omniTotalFrames };
+	if(opts.setStatus) await opts.setStatus(res.id, status6);
+	else if(!opts.omniId) await api(state.account!, uploader.agent, `${folder}/@${res.id}/status`, status6);
 
 	// Get all tiles from all subfolders of the output directory
 	uploader.add(await walkSync(info.baseDir));
@@ -59,7 +63,7 @@ export async function process(
 	// TODO: It's possible that this function is called if there are still ongoing tile uploads
 	// of this image. Fix this by adding a separate `oncomplete` trigger in Uploader for this individual
 	// tiled image, which should trigger this.
-	if(type != 'omni') uploader.add([() => api(state.account, uploader.agent, `${folder}/@${res.id}/status`, { status: 4 })]);
+	if(!opts.id && type != 'omni') uploader.add([() => api(state.account!, uploader.agent, `${folder}/@${res.id}/status`, { status: 4 })]);
 
 	return { id: res.id, width, height, baseDir: info.baseDir, omniFrame: opts?.omniFrame };
 }

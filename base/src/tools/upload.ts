@@ -160,7 +160,7 @@ export async function upload(
 			},
 			e => {
 				// If one omni frame or pdf page fails, everything fails
-				if(opts.type == 'omni' || _opts.pdfAlbum) throw e;
+				if(opts.existingId || opts.type == 'omni' || _opts.pdfAlbum) throw e;
 				const message = e && typeof e == 'string' ? e : e?.message;
 				state.log(`Error: Could not tile ${fileName}: ${message?.trim() ?? 'Unknown error'}`);
 				origImageNum--;
@@ -171,7 +171,7 @@ export async function upload(
 	const pdfAlbums:PDFAlbumResult[] = [];
 
 	// PDF parser
-	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.endsWith('.pdf')) {
+	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.toLowerCase().endsWith('.pdf')) {
 		state?.log(`Parsing PDF file ${f}...`);
 
 		let counter = 1;

@@ -18,6 +18,8 @@
 	let wasLoggedIn:boolean = false;
 	let showTerminal:boolean = false;
 	let folderSlug:string = '';
+	let requestedGroups:boolean = false;
+	let lastError:string|undefined = undefined;
 
 	const isDev = /localhost/.test(location.href);
 
@@ -27,10 +29,18 @@
 
 	$: { if($state?.account) {
 		loggingIn = false;
-		if(!$state.groups) API.emit('getGroups');
-	} else if(wasLoggedIn) {
-		notify('Succesfully logged out');
-		wasLoggedIn = false;
+		// Ask only once per login: the state update caused by a *failed* request
+		// would otherwise re-trigger this block and loop the request forever.
+		if(!$state.groups && !requestedGroups) {
+			requestedGroups = true;
+			API.emit('getGroups');
+		}
+	} else {
+		requestedGroups = false;
+		if(wasLoggedIn) {
+			notify('Succesfully logged out');
+			wasLoggedIn = false;
+		}
 	}}
 
 	$: { if($state?.groups && $state?.account && !wasLoggedIn) {
@@ -38,7 +48,9 @@
 		wasLoggedIn = true;
 	}}
 
-	$: { if($state?.error) notify($state.error, true); }
+	$: { if($state?.error) {
+		if($state.error != lastError) { lastError = $state.error; notify($state.error, true); }
+	} else lastError = undefined; }
 
 	let copied:boolean = false;
 	function copyLoginLink() {
@@ -151,6 +163,11 @@
 				Open this link to continue your login process:
 				<input class="h-[46px] my-16px w-full font-monospace text-normal px-8px bg-black-800 rounded-8px block flex-1 text-center" readonly value={$state.loginUrl} />
 				<button class={buttonClass} class:!text-green-300={copied} class:!border-green-300={copied} on:click={copyLoginLink}>Cop{copied ? 'ied' : 'y'} <Fa class="inline-block ml-8px" icon={copied ? faCheck : faCopy} /></button>
+			{/if}
+		{:else}
+			<p class="text-black-400">Loading your groups&hellip;</p>
+			{#if $state.error}
+				<button class={buttonClass} on:click={() => { lastError = undefined; API.emit('getGroups'); }}>Retry</button>
 			{/if}
 		{/if}
 	{/if}

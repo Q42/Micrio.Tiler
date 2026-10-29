@@ -167,7 +167,14 @@ app.whenReady().then(() => {
 		updateState(delete state.job);
 	});
 	ipcMain.on('getGroups', () =>
-		getGroups().then((g) => updateState((state.groups = g))),
+		getGroups().then(
+			(g) => updateState((state.groups = g)),
+			(e) =>
+				updateState(
+					(state.error =
+						'Could not load your groups: ' + (e?.message ?? e)),
+				),
+		),
 	);
 	ipcMain.on('destination', (e, slug: string) => {
 		if (slug) {

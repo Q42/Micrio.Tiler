@@ -1,0 +1,16 @@
+# pnpm 11 enables supply-chain protection by default: `minimumReleaseAge` defaults to
+# 1440 minutes (1 day), so a version published within the last 24h cannot be installed.
+# @micrio/tiler-base is published from this repo, so exempt it from that cooldown.
+# (Exclusions match by package name and cover all versions.)
+minimumReleaseAgeExclude:
+  - '@micrio/tiler-base'
+
+# pnpm 11 no longer reads non-auth settings from .npmrc, so the old
+# `engine-strict=true` in .npmrc is ignored. Keep the behaviour here instead.
+engineStrict: true
+
+# sharp ships prebuilt binaries through its @img/* optional dependencies, so its install
+# script is not required. pnpm 11 sets `strictDepBuilds: true` by default, which turns an
+# undeclared ignored build script into a hard error -- declare the intent explicitly.
+allowBuilds:
+  sharp: false

@@ -3,6 +3,7 @@ import type { FormatType, ImageInfo, ImageType, PDFAlbumResult, State } from '..
 import { pdf } from 'pdf-to-img';
 
 import { promises as fs } from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'os';
 import path from 'path';
 import https from 'https';
@@ -18,6 +19,32 @@ const setStatus = (state:State, status:string, override?:boolean, noLog?:boolean
 	if(!state) return;
 	if(state.job) state?.update?.(state.job.status = status);
 	if(!noLog) state.log(status, override);
+}
+
+/**
+ * pdf.js decodes JPEG2000 (JPXDecode) and JBIG2 page images with WebAssembly modules that ship
+ * inside `pdfjs-dist/wasm`. In Node those are read straight from disk, and `pdf-to-img` only
+ * forwards `cMapUrl` and `standardFontDataUrl` — never `wasmUrl` — so pdf.js falls back to its
+ * CWD-relative default of `wasm/`. That path does not exist, the wasm fails to instantiate, the
+ * pure-JS fallback cannot be imported either, and every scanned page comes out blank with
+ * `JpxError: OpenJPEG failed to initialize`.
+ *
+ * Since pdf-to-img 6.x / pdfjs-dist 5.x this affects all Internet Archive style scans (JPX + JBIG2).
+ * Resolve the exact pdfjs-dist copy that pdf-to-img itself loads and point pdf.js at its wasm folder.
+ */
+let pdfWasmUrl:string|undefined|null = null;
+function getPdfWasmUrl():string|undefined {
+	if(pdfWasmUrl !== null) return pdfWasmUrl || undefined;
+	try {
+		const pdfToImg = createRequire(import.meta.url).resolve('pdf-to-img');
+		const pdfjsPackage = createRequire(pdfToImg).resolve('pdfjs-dist/package.json');
+		// pdf.js requires a trailing slash on factory URLs; normalise separators for Windows
+		pdfWasmUrl = path.join(path.dirname(pdfjsPackage), 'wasm').split(path.sep).join('/') + '/';
+	} catch(e) {
+		// Fall back to the previous behaviour (only breaks JPX/JBIG2 pages)
+		pdfWasmUrl = '';
+	}
+	return pdfWasmUrl || undefined;
 }
 
 /** Process all specified and upload them to Micrio */
@@ -127,7 +154,14 @@ export async function upload(
 		state?.log(`Parsing PDF file ${f}...`);
 
 		let counter = 1;
-		const document = await pdf(f, { scale: parseInt(opts.pdfScale||'4') })
+		// Required for JPEG2000/JBIG2 scanned pages — see getPdfWasmUrl().
+		// `wasmUrl` only exists in pdfjs-dist >=5, so a stale local pdf-to-img install (which can
+		// still type-check as 4.x) makes the cast below necessary; consumers resolve >=6.
+		const wasmUrl = getPdfWasmUrl();
+		const document = await pdf(f, {
+			scale: parseInt(opts.pdfScale||'4'),
+			...(wasmUrl ? { docInitParams: { wasmUrl } } : {})
+		} as Parameters<typeof pdf>[1])
 			.catch(e => {throw new Error(`PDF reading error: ${e.toString()}`)});
 		totalJobs+=document.length;
 

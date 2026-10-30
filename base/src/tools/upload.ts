@@ -11,8 +11,8 @@ import { fsExists, jdToTime } from '../lib/utils.js';
 import { Uploader } from '../lib/uploader.js';
 import { process } from '../lib/tiler.js';
 import { getArchiveBin } from '../lib/archive.js';
-import { getPdfWasmUrl } from './pdf.js';
 import { PdfRenderWorker } from './pdf-render.js';
+import { PdfRenderer } from './pdf-renderer.js';
 
 const setStatus = (state:State, status:string, override?:boolean, noLog?:boolean) => {
 	if(!state) return;
@@ -154,15 +154,13 @@ export async function upload(
 	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.toLowerCase().endsWith('.pdf')) {
 		state?.log(`Parsing PDF file ${f}...`);
 
-		let counter = 1;
 		const scale = parseInt(opts.pdfScale ? opts.pdfScale.toString() : '4');
-		// Server-side tilers (signed upload URLs) render in a worker; the CLI/GUI keeps the
-		// in-process path. Rendering a large page blocks an event loop for seconds, which would
-		// otherwise starve all in-flight tile uploads.
+		// Server-side tilers (signed upload URLs) render in a worker, off the event loop;
+		// the CLI/GUI renders in-process. Both release each page's native memory.
 		const useWorker = (opts.pdfWorker ?? !!opts.getUploadUrls) && !!opts.existingId;
 		let pageCount:number;
 		let renderWorker:PdfRenderWorker|undefined;
-		let document:any;
+		let renderer:PdfRenderer|undefined;
 		if(useWorker) {
 			renderWorker = new PdfRenderWorker(f, scale);
 			pageCount = await renderWorker.ready.catch(async e => {
@@ -170,17 +168,8 @@ export async function upload(
 				throw new Error(`PDF reading error: ${e?.message ?? e}`);
 			});
 		} else {
-			// Required for JPEG2000/JBIG2 scanned pages — see getPdfWasmUrl().
-			// `wasmUrl` only exists in pdfjs-dist >=5, so a stale local pdf-to-img install (which can
-			// still type-check as 4.x) makes the cast below necessary; consumers resolve >=6.
-			const wasmUrl = getPdfWasmUrl();
-			const { pdf } = await import('pdf-to-img');
-			document = await pdf(f, {
-				scale,
-				...(wasmUrl ? { docInitParams: { wasmUrl } } : {})
-			} as Parameters<typeof pdf>[1])
-				.catch(e => {throw new Error(`PDF reading error: ${e.toString()}`)});
-			pageCount = document.length;
+			renderer = await PdfRenderer.open(f, scale);
+			pageCount = renderer.pages;
 		}
 		if(!pageCount) throw new Error('PDF contains no pages');
 		totalJobs+=pageCount;
@@ -234,28 +223,17 @@ export async function upload(
 					await addToQueue(info.fileName, files.length == 1, { pdfAlbum, pageId: info.pageId, pageName: info.pageName });
 				}
 			} else {
-				const iterator = document[Symbol.asyncIterator]();
-				while(true) {
-					const renderStart = Date.now();
-					const next = await iterator.next();
-					const renderMs = Date.now() - renderStart;
-					if(next.done) break;
-					const info = pageInfo(counter);
-					state.log(`Processing page ${counter} / ${pageCount} (rendered in ${renderMs}ms)...`, true);
-
-					// Not using the async method here corrupts the written image -_-
-					// Took a while to figure that out.
-					await fs.writeFile(info.fileName, next.value);
-
-					// Already start uploading and processing while parsing
+				for(let index=1; index<=pageCount; index++) {
+					const info = pageInfo(index);
+					const rendered = await renderer!.render(index, info.fileName);
+					state.log(`Processing page ${index} / ${pageCount} (rendered in ${rendered.ms}ms)...`, true);
 					await addToQueue(info.fileName, files.length == 1, { pdfAlbum, pageId: info.pageId, pageName: info.pageName });
-
-					counter++;
 				}
 			}
 			state.log(`${pageCount} PDF pages prepared in ${Date.now() - pdfStart}ms`, true);
 		} finally {
 			await renderWorker?.terminate();
+			await renderer?.close();
 		}
 
 		files.splice(i--, 1);

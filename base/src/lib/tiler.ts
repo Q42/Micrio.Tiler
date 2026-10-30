@@ -43,8 +43,10 @@ export async function process(
 	});
 	if(!res) throw new Error('Could not create image in Micrio! Do you have the correct permissions?');
 
+	const tileStart = Date.now();
 	const info = await tileToDir(isOmni ? `${res.id}/${opts.omniFrame!.toString()}` : res.id, f, outDir, format);
 	const { width, height } = info;
+	state.log?.(`Tiled ${res.id} in ${Date.now() - tileStart}ms`);
 
 	// If this is an extracted PNG file out of an original PDF file, we no longer need it
 	if(isPdfPage) await fs.rm(f);
@@ -57,18 +59,26 @@ export async function process(
 	else if(!opts.omniId) await api(state.account!, uploader.agent, `${folder}/@${res.id}/status`, status6);
 
 	// Get all tiles from all subfolders of the output directory
-	uploader.add(await walkSync(info.baseDir));
+	const uploadStart = Date.now();
+	const tiles = await walkSync(info.baseDir);
 
-	// Add a final Uploader job to set the Micrio image status to Completed (4).
-	// Existing targets (server-side tilers, PDF pages) report this through the setStatus hook,
-	// so each image/page goes live as soon as its own tiles are uploaded.
-	// TODO: It's possible that this function is called if there are still ongoing tile uploads
-	// of this image. Fix this by adding a separate `oncomplete` trigger in Uploader for this individual
-	// tiled image, which should trigger this.
-	if(type != 'omni') {
-		if(opts.setStatus) uploader.add([async () => { await opts.setStatus!(res.id, { status: 4 }); }]);
-		else if(!opts.id) uploader.add([() => api(state.account!, uploader.agent, `${folder}/@${res.id}/status`, { status: 4 })]);
-	}
+	// Report completion only after every tile of this image is uploaded. Existing targets
+	// (server-side tilers, PDF pages) report it through the setStatus hook; omni frames and
+	// existing targets without a hook do not get an individual completion status.
+	const finalize = type != 'omni'
+		? opts.setStatus
+			? async () => {
+				await opts.setStatus!(res.id, { status: 4 });
+				state.log?.(`Uploaded ${res.id} in ${Date.now() - uploadStart}ms`);
+			}
+			: !opts.id
+				? async () => {
+					await api(state.account!, uploader.agent, `${folder}/@${res.id}/status`, { status: 4 });
+					state.log?.(`Uploaded ${res.id} in ${Date.now() - uploadStart}ms`);
+				}
+				: undefined
+		: undefined;
+	uploader.add(tiles, finalize);
 
 	return { id: res.id, width, height, baseDir: info.baseDir, omniFrame: opts?.omniFrame };
 }

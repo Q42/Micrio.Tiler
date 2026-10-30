@@ -216,8 +216,15 @@ export async function upload(
 		const pdfDir = path.join(outDir, 'pdf');
 		if(pageIds) await fs.mkdir(pdfDir, { recursive: true });
 
-		for await (const image of document) {
-			state.log(`Processing page ${counter} / ${document.length}...`, true);
+		const iterator = document[Symbol.asyncIterator]();
+		const pdfStart = Date.now();
+		while(true) {
+			const renderStart = Date.now();
+			const next = await iterator.next();
+			const renderMs = Date.now() - renderStart;
+			if(next.done) break;
+			const image = next.value;
+			state.log(`Processing page ${counter} / ${document.length} (rendered in ${renderMs}ms)...`, true);
 			const pageId = pageIds?.[counter - 1];
 			const pageName = pageId ? `${pdfName}.${counter.toString().padStart(4, '0')}` : `${f}.${(counter).toString().padStart(4, '0')}.png`;
 			const fName = pageId ? path.join(pdfDir, `${pageId}.png`) : pageName;
@@ -231,6 +238,7 @@ export async function upload(
 
 			counter++;
 		}
+		state.log(`${document.length} PDF pages prepared in ${Date.now() - pdfStart}ms`, true);
 
 		files.splice(i--, 1);
 	}}

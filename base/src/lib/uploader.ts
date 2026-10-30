@@ -16,6 +16,11 @@ export interface UploaderOptions {
 
 type UploaderState = Partial<Pick<State, 'account'|'job'|'update'|'log'>>;
 
+interface UploadBatch {
+	remaining:number;
+	onComplete?:() => void|Promise<void>;
+}
+
 /** A session-wide multithreaded uploader to Micrio */
 export class Uploader {
 	private jobs:UploadJobType[] = [];
@@ -24,6 +29,9 @@ export class Uploader {
 	private error:Error|undefined;
 	private failed = false;
 	private uris:{[key:string]:string|Promise<void>} = {};
+	/** Per-image batches whose onComplete only runs when all their uploads succeeded */
+	private batches:Map<UploadJobType, UploadBatch> = new Map();
+	private finalizing:number = 0;
 
 	running:Map<UploadJobType, Promise<any>> = new Map();
 	errored:Map<UploadJobType, number> = new Map();
@@ -39,12 +47,21 @@ export class Uploader {
 		this.outDir = sanitize(outDir, outDir);
 	}
 
-	/** This is called for each individual resulting tile of an image operation
-	 * Or the final function to send the succesful status to Micrio after all tiles
-	 * of an image have been uploaded.
+	/** This is called for each individual resulting tile of an image operation.
+	 * When onComplete is given it runs only after every job of this call succeeded,
+	 * which is what makes "image ready" trustworthy: no tile can still be uploading.
 	 */
-	add(jobs:UploadJobType[]) {
+	add(jobs:UploadJobType[], onComplete?:() => void|Promise<void>) {
 		if(this.failed) return;
+		if(onComplete) {
+			if(!jobs.length) {
+				this.finalizing++;
+				this.runFinalizer({ remaining: 0, onComplete });
+				return;
+			}
+			const batch:UploadBatch = { remaining: jobs.length, onComplete };
+			for(const job of jobs) this.batches.set(job, batch);
+		}
 		this.jobs.push(...jobs);
 		if(this.state.job) this.state.update?.(this.state.job.numUploads += jobs.length);
 		this.nextBatch();
@@ -54,9 +71,52 @@ export class Uploader {
 	complete() : Promise<void> {
 		if(this.failed) return Promise.reject(this.error);
 		return new Promise((ok, err) => {
-			if(this.jobs.length+this.running.size == 0) return ok();
+			if(this.pending == 0) return ok();
 			this.oncomplete = ok;
 			this.onerror = err;
+		});
+	}
+
+	private get pending() : number {
+		return this.jobs.length + this.running.size + this.finalizing;
+	}
+
+	private checkComplete() : void {
+		if(this.failed) return;
+		const remaining = this.pending;
+		if(this.state.job) this.state.update?.(this.state.job.numUploaded = this.state.job.numUploads - remaining);
+		if(this.oncomplete) this.state.log?.(`Remaining uploads: ${remaining}...`, true);
+		if(this.jobs.length) this.nextBatch();
+		else if(!remaining) this.oncomplete?.();
+	}
+
+	private batchJobDone(job:UploadJobType) : void {
+		const batch = this.batches.get(job);
+		if(!batch) return;
+		this.batches.delete(job);
+		if(--batch.remaining > 0) return;
+		if(batch.onComplete) {
+			this.finalizing++;
+			this.runFinalizer(batch);
+		}
+	}
+
+	private runFinalizer(batch:UploadBatch) : void {
+		const finish = async () : Promise<void> => {
+			for(let attempt=0; ; attempt++) {
+				try { await batch.onComplete!(); return; }
+				catch(e:any) {
+					if(attempt >= NUM_UPLOAD_TRIES) {
+						this.fail(new Error(`Fatal error: could not finalize upload after ${NUM_UPLOAD_TRIES} tries. (${e?.message ?? 'Error'})`));
+						return;
+					}
+					await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+				}
+			}
+		};
+		finish().finally(() => {
+			this.finalizing--;
+			this.checkComplete();
 		});
 	}
 
@@ -113,10 +173,13 @@ export class Uploader {
 		if(this.failed || this.running.size >= UPLOAD_THREADS) return;
 		const job = this.jobs.shift();
 		if(!job) return;
-		this.running.set(job, (job instanceof Function ? job()
+		let succeeded = false;
+		const upload = job instanceof Function ? Promise.resolve().then(job)
 			: typeof job == 'string' ? this.getUploadUri(job).then(uri => this.upload(uri!, job))
-			: this.getUploadUri(job.path).then(uri => this.upload(uri!, job.path, job.blob))
-		).catch((e:any) => {
+			: this.getUploadUri(job.path).then(uri => this.upload(uri!, job.path, job.blob));
+		this.running.set(job, upload.then(() => {
+			succeeded = true;
+		}).catch((e:any) => {
 			// Could not get upload URLs -- immediately kill
 			if(e?.message?.startsWith('Upload error: ')) { this.fail(e); return; }
 			const numErrored = (this.errored.get(job) ?? 0) + 1;
@@ -132,11 +195,8 @@ export class Uploader {
 			if(typeof job == 'string') delete this.uris[job];
 			else if(!(job instanceof Function)) delete this.uris[job.path];
 			if(this.failed) return;
-			const remaining = this.jobs.length+this.running.size;
-			if(this.state.job) this.state.update?.(this.state.job.numUploaded = this.state.job.numUploads - remaining);
-			if(this.oncomplete) this.state.log?.(`Remaining uploads: ${remaining}...`, true);
-			if(this.jobs.length) this.nextBatch();
-			else if(!remaining) this.oncomplete?.();
+			if(succeeded) this.batchJobDone(job);
+			this.checkComplete();
 		}));
 	}
 

@@ -1,5 +1,5 @@
 import type { FormatType, ImageInfo, ImageType, State, TileResult } from '../types.js';
-import type { Uploader } from './uploader.js';
+import type { Uploader, UploadBatchStats } from './uploader.js';
 
 import path from 'path';
 import sharp from 'sharp';
@@ -59,22 +59,25 @@ export async function process(
 	else if(!opts.omniId) await api(state.account!, uploader.agent, `${folder}/@${res.id}/status`, status6);
 
 	// Get all tiles from all subfolders of the output directory
-	const uploadStart = Date.now();
 	const tiles = await walkSync(info.baseDir);
 
 	// Report completion only after every tile of this image is uploaded. Existing targets
 	// (server-side tilers, PDF pages) report it through the setStatus hook; omni frames and
 	// existing targets without a hook do not get an individual completion status.
+	const logUploaded = (stats:UploadBatchStats) : void => {
+		const first = stats.firstUploadAt ?? stats.queuedAt;
+		state.log?.(`Uploaded ${res.id}: queued ${first - stats.queuedAt}ms, transfer ${stats.completedAt - first}ms`);
+	};
 	const finalize = type != 'omni'
 		? opts.setStatus
-			? async () => {
+			? async (stats:UploadBatchStats) => {
 				await opts.setStatus!(res.id, { status: 4 });
-				state.log?.(`Uploaded ${res.id} in ${Date.now() - uploadStart}ms`);
+				logUploaded(stats);
 			}
 			: !opts.id
-				? async () => {
+				? async (stats:UploadBatchStats) => {
 					await api(state.account!, uploader.agent, `${folder}/@${res.id}/status`, { status: 4 });
-					state.log?.(`Uploaded ${res.id} in ${Date.now() - uploadStart}ms`);
+					logUploaded(stats);
 				}
 				: undefined
 		: undefined;

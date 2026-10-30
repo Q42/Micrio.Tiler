@@ -16,9 +16,20 @@ export interface UploaderOptions {
 
 type UploaderState = Partial<Pick<State, 'account'|'job'|'update'|'log'>>;
 
+export interface UploadBatchStats {
+	/** When the image's tiles were queued */
+	queuedAt:number;
+	/** When the first tile of the image was dispatched (signing + queue wait is before this) */
+	firstUploadAt?:number;
+	/** When the last tile of the image finished uploading */
+	completedAt:number;
+}
+
 interface UploadBatch {
 	remaining:number;
-	onComplete?:() => void|Promise<void>;
+	onComplete?:(stats:UploadBatchStats) => void|Promise<void>;
+	queuedAt:number;
+	firstUploadAt?:number;
 }
 
 /** A session-wide multithreaded uploader to Micrio */
@@ -32,6 +43,10 @@ export class Uploader {
 	/** Per-image batches whose onComplete only runs when all their uploads succeeded */
 	private batches:Map<UploadJobType, UploadBatch> = new Map();
 	private finalizing:number = 0;
+	private stats = { done:0, bytes:0, maxInFlight:0 };
+	private statsLogAt = Date.now();
+	private statsLogDone = 0;
+	private statsLogBytes = 0;
 
 	running:Map<UploadJobType, Promise<any>> = new Map();
 	errored:Map<UploadJobType, number> = new Map();
@@ -51,15 +66,15 @@ export class Uploader {
 	 * When onComplete is given it runs only after every job of this call succeeded,
 	 * which is what makes "image ready" trustworthy: no tile can still be uploading.
 	 */
-	add(jobs:UploadJobType[], onComplete?:() => void|Promise<void>) {
+	add(jobs:UploadJobType[], onComplete?:(stats:UploadBatchStats) => void|Promise<void>) {
 		if(this.failed) return;
 		if(onComplete) {
 			if(!jobs.length) {
 				this.finalizing++;
-				this.runFinalizer({ remaining: 0, onComplete });
+				this.runFinalizer({ remaining: 0, onComplete, queuedAt: Date.now() });
 				return;
 			}
-			const batch:UploadBatch = { remaining: jobs.length, onComplete };
+			const batch:UploadBatch = { remaining: jobs.length, onComplete, queuedAt: Date.now() };
 			for(const job of jobs) this.batches.set(job, batch);
 		}
 		this.jobs.push(...jobs);
@@ -71,7 +86,10 @@ export class Uploader {
 	complete() : Promise<void> {
 		if(this.failed) return Promise.reject(this.error);
 		return new Promise((ok, err) => {
-			if(this.pending == 0) return ok();
+			if(this.pending == 0) {
+				this.logUploadStats(true);
+				return ok();
+			}
 			this.oncomplete = ok;
 			this.onerror = err;
 		});
@@ -87,7 +105,24 @@ export class Uploader {
 		if(this.state.job) this.state.update?.(this.state.job.numUploaded = this.state.job.numUploads - remaining);
 		if(this.oncomplete) this.state.log?.(`Remaining uploads: ${remaining}...`, true);
 		if(this.jobs.length) this.nextBatch();
-		else if(!remaining) this.oncomplete?.();
+		else if(!remaining) {
+			// Only write the summary once, at the end of the whole job
+			if(this.oncomplete) this.logUploadStats(true);
+			this.oncomplete?.();
+		}
+	}
+
+	private logUploadStats(force:boolean = false) : void {
+		const now = Date.now();
+		const secs = (now - this.statsLogAt) / 1000;
+		if(!force && secs < 10) return;
+		const done = this.stats.done - this.statsLogDone;
+		const bytes = this.stats.bytes - this.statsLogBytes;
+		const mbytes = bytes / 1048576;
+		this.state.log?.(`Uploads: ${done} tiles / ${mbytes.toFixed(1)} MB in ${secs.toFixed(1)}s (${(mbytes / Math.max(secs, 0.001)).toFixed(1)} MB/s), max ${this.stats.maxInFlight} in flight`, true);
+		this.statsLogAt = now;
+		this.statsLogDone = this.stats.done;
+		this.statsLogBytes = this.stats.bytes;
 	}
 
 	private batchJobDone(job:UploadJobType) : void {
@@ -104,7 +139,14 @@ export class Uploader {
 	private runFinalizer(batch:UploadBatch) : void {
 		const finish = async () : Promise<void> => {
 			for(let attempt=0; ; attempt++) {
-				try { await batch.onComplete!(); return; }
+				try {
+					await batch.onComplete!({
+						queuedAt: batch.queuedAt,
+						firstUploadAt: batch.firstUploadAt,
+						completedAt: Date.now()
+					});
+					return;
+				}
 				catch(e:any) {
 					if(attempt >= NUM_UPLOAD_TRIES) {
 						this.fail(new Error(`Fatal error: could not finalize upload after ${NUM_UPLOAD_TRIES} tries. (${e?.message ?? 'Error'})`));
@@ -173,6 +215,9 @@ export class Uploader {
 		if(this.failed || this.running.size >= UPLOAD_THREADS) return;
 		const job = this.jobs.shift();
 		if(!job) return;
+		const batch = this.batches.get(job);
+		if(batch && batch.firstUploadAt == null) batch.firstUploadAt = Date.now();
+		this.stats.maxInFlight = Math.max(this.stats.maxInFlight, this.running.size + 1);
 		let succeeded = false;
 		const upload = job instanceof Function ? Promise.resolve().then(job)
 			: typeof job == 'string' ? this.getUploadUri(job).then(uri => this.upload(uri!, job))
@@ -227,8 +272,15 @@ export class Uploader {
 				agent: this.agent,
 				headers
 			}, res => {
-				req.destroy();
-				if(res.statusCode && res.statusCode >= 200 && res.statusCode < 300) ok();
+				// Drain and let the keep-alive agent reuse the socket; destroying it here
+				// forced a fresh DNS lookup + TCP + TLS handshake for every tile.
+				res.resume();
+				if(res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+					this.stats.done++;
+					this.stats.bytes += blob.byteLength;
+					this.logUploadStats();
+					ok();
+				}
 				else err(new Error(res.statusCode+': '+res.statusMessage));
 			});
 			req.on('error', (e) => {

@@ -1,7 +1,6 @@
 import type { FormatType, ImageInfo, ImageType, PDFAlbumResult, State } from '../types.js';
 
 import { promises as fs } from 'node:fs';
-import { createRequire } from 'node:module';
 import os from 'os';
 import path from 'path';
 import https from 'https';
@@ -12,37 +11,13 @@ import { fsExists, jdToTime } from '../lib/utils.js';
 import { Uploader } from '../lib/uploader.js';
 import { process } from '../lib/tiler.js';
 import { getArchiveBin } from '../lib/archive.js';
+import { getPdfWasmUrl } from './pdf.js';
+import { PdfRenderWorker } from './pdf-render.js';
 
 const setStatus = (state:State, status:string, override?:boolean, noLog?:boolean) => {
 	if(!state) return;
 	if(state.job) state?.update?.(state.job.status = status);
 	if(!noLog) state.log(status, override);
-}
-
-/**
- * pdf.js decodes JPEG2000 (JPXDecode) and JBIG2 page images with WebAssembly modules that ship
- * inside `pdfjs-dist/wasm`. In Node those are read straight from disk, and `pdf-to-img` only
- * forwards `cMapUrl` and `standardFontDataUrl` — never `wasmUrl` — so pdf.js falls back to its
- * CWD-relative default of `wasm/`. That path does not exist, the wasm fails to instantiate, the
- * pure-JS fallback cannot be imported either, and every scanned page comes out blank with
- * `JpxError: OpenJPEG failed to initialize`.
- *
- * Since pdf-to-img 6.x / pdfjs-dist 5.x this affects all Internet Archive style scans (JPX + JBIG2).
- * Resolve the exact pdfjs-dist copy that pdf-to-img itself loads and point pdf.js at its wasm folder.
- */
-let pdfWasmUrl:string|undefined|null = null;
-function getPdfWasmUrl():string|undefined {
-	if(pdfWasmUrl !== null) return pdfWasmUrl || undefined;
-	try {
-		const pdfToImg = createRequire(import.meta.url).resolve('pdf-to-img');
-		const pdfjsPackage = createRequire(pdfToImg).resolve('pdfjs-dist/package.json');
-		// pdf.js requires a trailing slash on factory URLs; normalise separators for Windows
-		pdfWasmUrl = path.join(path.dirname(pdfjsPackage), 'wasm').split(path.sep).join('/') + '/';
-	} catch(e) {
-		// Fall back to the previous behaviour (only breaks JPX/JBIG2 pages)
-		pdfWasmUrl = '';
-	}
-	return pdfWasmUrl || undefined;
 }
 
 /** Process all specified and upload them to Micrio */
@@ -62,6 +37,8 @@ export async function upload(
 		setStatus?: (id:string, data:{status:number;width?:number;height?:number;format?:FormatType;length?:number}) => void|Promise<void>;
 		/** Signed upload URL provider */
 		getUploadUrls?: (files:string[]) => Promise<string[]>;
+		/** Render PDF pages in a worker thread (default: when getUploadUrls is set) */
+		pdfWorker?: boolean;
 		/** PDF display name for page titles */
 		pdfName?: string;
 		/** Album archive version (Unix seconds) */
@@ -76,7 +53,10 @@ export async function upload(
 	const httpAgent = new https.Agent({
 		rejectUnauthorized: true,
 		keepAlive: true,
-		timeout: 3000
+		// Keep-alive already reuses sockets; caching TLS session tickets made the runtime
+		// dump binary session blobs to the logs for every new connection.
+		maxCachedSessions: 0,
+		timeout: 120_000
 	});
 
 	if(!opts.existingId) {
@@ -175,70 +155,108 @@ export async function upload(
 		state?.log(`Parsing PDF file ${f}...`);
 
 		let counter = 1;
-		// Required for JPEG2000/JBIG2 scanned pages — see getPdfWasmUrl().
-		// `wasmUrl` only exists in pdfjs-dist >=5, so a stale local pdf-to-img install (which can
-		// still type-check as 4.x) makes the cast below necessary; consumers resolve >=6.
-		const wasmUrl = getPdfWasmUrl();
-		const { pdf } = await import('pdf-to-img');
-		const document = await pdf(f, {
-			scale: parseInt(opts.pdfScale ? opts.pdfScale.toString() : '4'),
-			...(wasmUrl ? { docInitParams: { wasmUrl } } : {})
-		} as Parameters<typeof pdf>[1])
-			.catch(e => {throw new Error(`PDF reading error: ${e.toString()}`)});
-		totalJobs+=document.length;
-
-		let pdfAlbum:PDFAlbumResult;
-		let pageIds:string[]|undefined;
-		let pdfName:string|undefined;
-
-		if(opts.existingId) {
-			if(!opts.getIds) throw new Error('No PDF page ID resolver supplied');
-			pdfName = opts.pdfName ?? path.basename(f).replace(/\.pdf$/i, '');
-			const definitions = Array.from({length: document.length}, (_, i) => ({
-				index: i + 1,
-				name: `${pdfName}.${String(i + 1).padStart(4, '0')}`
-			}));
-			pageIds = await opts.getIds(definitions);
-			if(pageIds.length != document.length) throw new Error('Invalid PDF page ID response');
-			pdfAlbum = { id: opts.existingId, slug: '', created: 0 };
-		} else {
-			// Create a new Micrio PDF album in the specified folder
-			const created = await api<PDFAlbumResult>(state.account!, uploader.agent, `${folder}/create`,{
-				name: encodeURIComponent(f),
-				type: 'pdf'
+		const scale = parseInt(opts.pdfScale ? opts.pdfScale.toString() : '4');
+		// Server-side tilers (signed upload URLs) render in a worker; the CLI/GUI keeps the
+		// in-process path. Rendering a large page blocks an event loop for seconds, which would
+		// otherwise starve all in-flight tile uploads.
+		const useWorker = (opts.pdfWorker ?? !!opts.getUploadUrls) && !!opts.existingId;
+		let pageCount:number;
+		let renderWorker:PdfRenderWorker|undefined;
+		let document:any;
+		if(useWorker) {
+			renderWorker = new PdfRenderWorker(f, scale);
+			pageCount = await renderWorker.ready.catch(async e => {
+				await renderWorker!.terminate();
+				throw new Error(`PDF reading error: ${e?.message ?? e}`);
 			});
-			if(!created) throw new Error('Could not create PDF album');
-			pdfAlbum = created;
-			pdfAlbums.push(pdfAlbum);
+		} else {
+			// Required for JPEG2000/JBIG2 scanned pages — see getPdfWasmUrl().
+			// `wasmUrl` only exists in pdfjs-dist >=5, so a stale local pdf-to-img install (which can
+			// still type-check as 4.x) makes the cast below necessary; consumers resolve >=6.
+			const wasmUrl = getPdfWasmUrl();
+			const { pdf } = await import('pdf-to-img');
+			document = await pdf(f, {
+				scale,
+				...(wasmUrl ? { docInitParams: { wasmUrl } } : {})
+			} as Parameters<typeof pdf>[1])
+				.catch(e => {throw new Error(`PDF reading error: ${e.toString()}`)});
+			pageCount = document.length;
 		}
+		if(!pageCount) throw new Error('PDF contains no pages');
+		totalJobs+=pageCount;
 
-		fileOutputDirs.set(pdfAlbum.id, []);
-		const pdfDir = path.join(outDir, 'pdf');
-		if(pageIds) await fs.mkdir(pdfDir, { recursive: true });
+		try {
+			let pdfAlbum:PDFAlbumResult;
+			let pageIds:string[]|undefined;
+			let pdfName:string|undefined;
 
-		const iterator = document[Symbol.asyncIterator]();
-		const pdfStart = Date.now();
-		while(true) {
-			const renderStart = Date.now();
-			const next = await iterator.next();
-			const renderMs = Date.now() - renderStart;
-			if(next.done) break;
-			const image = next.value;
-			state.log(`Processing page ${counter} / ${document.length} (rendered in ${renderMs}ms)...`, true);
-			const pageId = pageIds?.[counter - 1];
-			const pageName = pageId ? `${pdfName}.${counter.toString().padStart(4, '0')}` : `${f}.${(counter).toString().padStart(4, '0')}.png`;
-			const fName = pageId ? path.join(pdfDir, `${pageId}.png`) : pageName;
+			if(opts.existingId) {
+				if(!opts.getIds) throw new Error('No PDF page ID resolver supplied');
+				pdfName = opts.pdfName ?? path.basename(f).replace(/\.pdf$/i, '');
+				const definitions = Array.from({length: pageCount}, (_, i) => ({
+					index: i + 1,
+					name: `${pdfName}.${String(i + 1).padStart(4, '0')}`
+				}));
+				pageIds = await opts.getIds(definitions);
+				if(pageIds.length != pageCount) throw new Error('Invalid PDF page ID response');
+				pdfAlbum = { id: opts.existingId, slug: '', created: 0 };
+			} else {
+				// Create a new Micrio PDF album in the specified folder
+				const created = await api<PDFAlbumResult>(state.account!, uploader.agent, `${folder}/create`,{
+					name: encodeURIComponent(f),
+					type: 'pdf'
+				});
+				if(!created) throw new Error('Could not create PDF album');
+				pdfAlbum = created;
+				pdfAlbums.push(pdfAlbum);
+			}
 
-			// Not using the async method here corrupts the written image -_-
-			// Took a while to figure that out.
-			await fs.writeFile(fName, image);
+			fileOutputDirs.set(pdfAlbum.id, []);
+			const pdfDir = path.join(outDir, 'pdf');
+			if(pageIds) await fs.mkdir(pdfDir, { recursive: true });
 
-			// Already start uploading and processing while parsing
-			await addToQueue(fName, files.length == 1, { pdfAlbum, pageId, pageName });
+			const pageInfo = (index:number) => {
+				const pageId = pageIds?.[index - 1];
+				const pageName = pageId ? `${pdfName}.${index.toString().padStart(4, '0')}` : `${f}.${index.toString().padStart(4, '0')}.png`;
+				return { pageId, pageName, fileName: pageId ? path.join(pdfDir, `${pageId}.png`) : pageName };
+			};
 
-			counter++;
+			const pdfStart = Date.now();
+			if(renderWorker) {
+				// Request the next page before queueing the current one, so rendering keeps going
+				// in the worker while the main thread tiles and uploads the previous page.
+				let request = renderWorker.render(1, pageInfo(1).fileName);
+				for(let index=1; index<=pageCount; index++) {
+					const rendered = await request;
+					state.log(`Processing page ${index} / ${pageCount} (rendered in ${rendered.ms}ms)...`, true);
+					const info = pageInfo(index);
+					if(index < pageCount) request = renderWorker.render(index + 1, pageInfo(index + 1).fileName);
+					await addToQueue(info.fileName, files.length == 1, { pdfAlbum, pageId: info.pageId, pageName: info.pageName });
+				}
+			} else {
+				const iterator = document[Symbol.asyncIterator]();
+				while(true) {
+					const renderStart = Date.now();
+					const next = await iterator.next();
+					const renderMs = Date.now() - renderStart;
+					if(next.done) break;
+					const info = pageInfo(counter);
+					state.log(`Processing page ${counter} / ${pageCount} (rendered in ${renderMs}ms)...`, true);
+
+					// Not using the async method here corrupts the written image -_-
+					// Took a while to figure that out.
+					await fs.writeFile(info.fileName, next.value);
+
+					// Already start uploading and processing while parsing
+					await addToQueue(info.fileName, files.length == 1, { pdfAlbum, pageId: info.pageId, pageName: info.pageName });
+
+					counter++;
+				}
+			}
+			state.log(`${pageCount} PDF pages prepared in ${Date.now() - pdfStart}ms`, true);
+		} finally {
+			await renderWorker?.terminate();
 		}
-		state.log(`${document.length} PDF pages prepared in ${Date.now() - pdfStart}ms`, true);
 
 		files.splice(i--, 1);
 	}}

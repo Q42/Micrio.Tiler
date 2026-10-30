@@ -58,7 +58,7 @@ export async function upload(
 		existingId?: string;
 		/** Resolve one ID for each PDF page (one call) */
 		getIds?: (pages:{index:number;name:string}[]) => Promise<string[]>;
-		/** Report status-6 updates to the caller instead of the dashboard API */
+		/** Use this callback for status updates (6 = storing, 4 = completed) instead of the dashboard API */
 		setStatus?: (id:string, data:{status:number;width?:number;height?:number;format?:FormatType;length?:number}) => void|Promise<void>;
 		/** Signed upload URL provider */
 		getUploadUrls?: (files:string[]) => Promise<string[]>;

@@ -27,7 +27,7 @@ export async function process(
 		omniTotalFrames?:number;
 		/** Tile an existing image under this ID and skip create/final status */
 		id?:string;
-		/** Use this callback for the status-6 update instead of the dashboard API */
+		/** Use this callback for status updates (6 = storing, 4 = completed) instead of the dashboard API */
 		setStatus?:(id:string, data:{status:number; width?:number; height?:number; format?:FormatType; length?:number}) => void|Promise<void>;
 	} = {}
 ) : Promise<ImageInfo> {
@@ -59,11 +59,16 @@ export async function process(
 	// Get all tiles from all subfolders of the output directory
 	uploader.add(await walkSync(info.baseDir));
 
-	// Add a final Uploader job to set the Micrio image status to Completed (4)
+	// Add a final Uploader job to set the Micrio image status to Completed (4).
+	// Existing targets (server-side tilers, PDF pages) report this through the setStatus hook,
+	// so each image/page goes live as soon as its own tiles are uploaded.
 	// TODO: It's possible that this function is called if there are still ongoing tile uploads
 	// of this image. Fix this by adding a separate `oncomplete` trigger in Uploader for this individual
 	// tiled image, which should trigger this.
-	if(!opts.id && type != 'omni') uploader.add([() => api(state.account!, uploader.agent, `${folder}/@${res.id}/status`, { status: 4 })]);
+	if(type != 'omni') {
+		if(opts.setStatus) uploader.add([async () => { await opts.setStatus!(res.id, { status: 4 }); }]);
+		else if(!opts.id) uploader.add([() => api(state.account!, uploader.agent, `${folder}/@${res.id}/status`, { status: 4 })]);
+	}
 
 	return { id: res.id, width, height, baseDir: info.baseDir, omniFrame: opts?.omniFrame };
 }

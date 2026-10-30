@@ -57,8 +57,8 @@ export interface LoginStatusResult {
 export type Logger = (str?:string, overwrite?:boolean) => void;
 
 export interface State {
-	/** The logged in user account */
-	account: UserToken;
+	/** The logged in user account (not used by server-side callbacks) */
+	account?: UserToken;
 	/** Log output */
 	log: Logger;
 	/** [GUI] Optional tile job state object */

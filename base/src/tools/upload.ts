@@ -1,7 +1,5 @@
 import type { FormatType, ImageInfo, ImageType, PDFAlbumResult, State } from '../types.js';
 
-import { pdf } from 'pdf-to-img';
-
 import { promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'os';
@@ -51,31 +49,47 @@ function getPdfWasmUrl():string|undefined {
 export async function upload(
 	files:string[],
 	opts:{
-		destination: string;
+		destination?: string;
 		format: FormatType;
 		type: ImageType;
-		pdfScale: string;
+		pdfScale: string|number;
 		account?: string;
+		/** Tile into an existing image or album instead of creating one */
+		existingId?: string;
+		/** Resolve one ID for each PDF page (one call) */
+		getIds?: (pages:{index:number;name:string}[]) => Promise<string[]>;
+		/** Report status-6 updates to the caller instead of the dashboard API */
+		setStatus?: (id:string, data:{status:number;width?:number;height?:number;format?:FormatType;length?:number}) => void|Promise<void>;
+		/** Signed upload URL provider */
+		getUploadUrls?: (files:string[]) => Promise<string[]>;
+		/** PDF display name for page titles */
+		pdfName?: string;
+		/** Album archive version (Unix seconds) */
+		albumVersion?: number;
+		outDir?: string;
 	},
 	state:State
 ) {
-	if(!state?.account?.email) throw new Error(`Not logged in. Run 'micrio login' first`);
+	if(!opts.existingId && !state?.account?.email) throw new Error(`Not logged in. Run 'micrio login' first`);
 
-	let url:URL|undefined;
-	try { url = new URL(opts.destination) } catch(e) {
-		throw new Error('Invalid target URL. This has to be the full URL of the target folder of the Micrio dashboard (https://dash.micr.io/...)');
-	}
-
-	const folder = url.pathname;
+	let folder = '';
 	const httpAgent = new https.Agent({
 		rejectUnauthorized: true,
 		keepAlive: true,
 		timeout: 3000
 	});
 
-	// Check if user has access to the requested destination folder
-	// This automatically throws an error if the user doesn't have access or the folder doesn't exist
-	await api(state.account, httpAgent, `${folder}/access`);
+	if(!opts.existingId) {
+		let url:URL|undefined;
+		try { url = new URL(opts.destination!) } catch(e) {
+			throw new Error('Invalid target URL. This has to be the full URL of the target folder of the Micrio dashboard (https://dash.micr.io/...)');
+		}
+		folder = url.pathname;
+
+		// Check if user has access to the requested destination folder
+		// This automatically throws an error if the user doesn't have access or the folder doesn't exist
+		await api(state.account!, httpAgent, `${folder}/access`);
+	}
 
 	const start = Date.now();
 
@@ -83,10 +97,8 @@ export async function upload(
 
 	let origImageNum = files.length;
 
-	const tmpDir = path.join(os.tmpdir(), '_micrio');
-	if(!await fsExists(tmpDir)) await fs.mkdir(tmpDir);
-	const outDir = path.join(tmpDir, Math.floor(Math.random()*10000000)+'');
-	if(!await fsExists(outDir)) await fs.mkdir(outDir);
+	const outDir = opts.outDir ?? path.join(os.tmpdir(), '_micrio', Math.floor(Math.random()*10000000)+'');
+	if(!await fsExists(outDir)) await fs.mkdir(outDir, { recursive: true });
 
 	// TS is weird here -- if this can be undefined, compilation messes up
 	let omni:{
@@ -95,7 +107,9 @@ export async function upload(
 		height?: number;
 	} = {};
 
-	const uploader = new Uploader(httpAgent, state, folder, opts.format, outDir);
+	const uploader = new Uploader(httpAgent, state, folder, opts.format, outDir, {
+		getUploadUrls: opts.getUploadUrls
+	});
 	const hQueue:{[key:string]:Promise<any>} = {};
 
 	// Omni images start with single image to create main ID
@@ -113,15 +127,21 @@ export async function upload(
 	const addToQueue = async (fileName:string, saveId:boolean, _opts:{
 		omniFrameIdx?: number;
 		pdfAlbum?: PDFAlbumResult;
+		pageId?: string;
+		pageName?: string;
+		targetId?: string;
 	} = {}) => {
 		const queue = Object.values(hQueue);
 		if(queue.length >= threads) await Promise.any(queue);
+		const targetId = _opts.pageId ?? _opts.targetId;
 		hQueue[fileName] = process(state, uploader, fileName, outDir, folder+(_opts.pdfAlbum ? '/'+_opts.pdfAlbum.slug:''), opts.format, opts.type, {
 			omniId: omni?.id,
 			omniFrame: _opts.omniFrameIdx,
 			omniTotalFrames: totalJobs,
+			id: targetId,
+			setStatus: opts.setStatus,
 		}).then(
-			r => {
+			async r => {
 				delete hQueue[fileName];
 				numProcessed++;
 				if(state.job) state.update?.(state.job.numProcessed = numProcessed);
@@ -135,11 +155,12 @@ export async function upload(
 				if(saveId) singleImageResultId = r.id;
 				// When reading to create preview archive, add the image ID there
 				const dirKey = omni?.id || _opts.pdfAlbum?.id;
-				if(dirKey) fileOutputDirs.get(dirKey)?.push([fileName, r]);
+				if(dirKey) fileOutputDirs.get(dirKey)?.push([_opts.pageName ?? fileName, r]);
+				if(_opts.pageId) await fs.rm(fileName, { force: true });
 			},
 			e => {
 				// If one omni frame or pdf page fails, everything fails
-				if(opts.type == 'omni' || _opts.pdfAlbum) throw e;
+				if(opts.existingId || opts.type == 'omni' || _opts.pdfAlbum) throw e;
 				const message = e && typeof e == 'string' ? e : e?.message;
 				state.log(`Error: Could not tile ${fileName}: ${message?.trim() ?? 'Unknown error'}`);
 				origImageNum--;
@@ -150,7 +171,7 @@ export async function upload(
 	const pdfAlbums:PDFAlbumResult[] = [];
 
 	// PDF parser
-	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.endsWith('.pdf')) {
+	for(let i=0;i<files.length;i++) { const f = files[i]; if(f.toLowerCase().endsWith('.pdf')) {
 		state?.log(`Parsing PDF file ${f}...`);
 
 		let counter = 1;
@@ -158,33 +179,55 @@ export async function upload(
 		// `wasmUrl` only exists in pdfjs-dist >=5, so a stale local pdf-to-img install (which can
 		// still type-check as 4.x) makes the cast below necessary; consumers resolve >=6.
 		const wasmUrl = getPdfWasmUrl();
+		const { pdf } = await import('pdf-to-img');
 		const document = await pdf(f, {
-			scale: parseInt(opts.pdfScale||'4'),
+			scale: parseInt(opts.pdfScale ? opts.pdfScale.toString() : '4'),
 			...(wasmUrl ? { docInitParams: { wasmUrl } } : {})
 		} as Parameters<typeof pdf>[1])
 			.catch(e => {throw new Error(`PDF reading error: ${e.toString()}`)});
 		totalJobs+=document.length;
 
-		// Create a new Micrio PDF album in the specified folder
-		const pdfAlbum = await api<PDFAlbumResult>(state.account, uploader.agent, `${folder}/create`,{
-			name: encodeURIComponent(f),
-			type: 'pdf'
-		});
+		let pdfAlbum:PDFAlbumResult;
+		let pageIds:string[]|undefined;
+		let pdfName:string|undefined;
 
-		if(!pdfAlbum) throw new Error('Could not create PDF album');
+		if(opts.existingId) {
+			if(!opts.getIds) throw new Error('No PDF page ID resolver supplied');
+			pdfName = opts.pdfName ?? path.basename(f).replace(/\.pdf$/i, '');
+			const definitions = Array.from({length: document.length}, (_, i) => ({
+				index: i + 1,
+				name: `${pdfName}.${String(i + 1).padStart(4, '0')}`
+			}));
+			pageIds = await opts.getIds(definitions);
+			if(pageIds.length != document.length) throw new Error('Invalid PDF page ID response');
+			pdfAlbum = { id: opts.existingId, slug: '', created: 0 };
+		} else {
+			// Create a new Micrio PDF album in the specified folder
+			const created = await api<PDFAlbumResult>(state.account!, uploader.agent, `${folder}/create`,{
+				name: encodeURIComponent(f),
+				type: 'pdf'
+			});
+			if(!created) throw new Error('Could not create PDF album');
+			pdfAlbum = created;
+			pdfAlbums.push(pdfAlbum);
+		}
+
 		fileOutputDirs.set(pdfAlbum.id, []);
-		pdfAlbums.push(pdfAlbum);
+		const pdfDir = path.join(outDir, 'pdf');
+		if(pageIds) await fs.mkdir(pdfDir, { recursive: true });
 
 		for await (const image of document) {
 			state.log(`Processing page ${counter} / ${document.length}...`, true);
-			const fName = `${f}.${(counter).toString().padStart(4, '0')}.png`;
+			const pageId = pageIds?.[counter - 1];
+			const pageName = pageId ? `${pdfName}.${counter.toString().padStart(4, '0')}` : `${f}.${(counter).toString().padStart(4, '0')}.png`;
+			const fName = pageId ? path.join(pdfDir, `${pageId}.png`) : pageName;
 
 			// Not using the async method here corrupts the written image -_-
 			// Took a while to figure that out.
 			await fs.writeFile(fName, image);
 
 			// Already start uploading and processing while parsing
-			await addToQueue(fName, files.length == 1, { pdfAlbum });
+			await addToQueue(fName, files.length == 1, { pdfAlbum, pageId, pageName });
 
 			counter++;
 		}
@@ -197,7 +240,10 @@ export async function upload(
 		totalJobs+=files.length;
 		setStatus(state, 'Processing...', false, true);
 		if(files.length == 1) state?.log('Processing: ' + files[0]);
-		for(let i=0;i<files.length;i++) await addToQueue(files[i], opts.type == 'omni' || files.length == 1, { omniFrameIdx: i });
+		for(let i=0;i<files.length;i++) await addToQueue(files[i], opts.type == 'omni' || files.length == 1, {
+			omniFrameIdx: i,
+			targetId: opts.existingId
+		});
 	}
 
 	// Wait for all images to finish processing
@@ -210,13 +256,16 @@ export async function upload(
 	// which contains thumbnails of each individual frame/page
 	for(let [containerId, entries] of Array.from(fileOutputDirs.entries())) {
 		const album = pdfAlbums.find(a => a.id == containerId);
+		const albumVersion = opts.existingId
+			? (opts.albumVersion ?? Math.floor(Date.now()/1000))
+			: Math.floor(jdToTime(album?.created ?? 0)/1000);
 		// Generate and upload the file and tell Micrio that the omni object or album is published
 		uploader.add([
 			{
-				path: omni?.id ? `${omni.id}/base.bin` : `g/${containerId}.${Math.floor(jdToTime(album?.created ?? 0)/1000)}.bin`,
+				path: omni?.id ? `${omni.id}/base.bin` : `g/${containerId}.${albumVersion}.bin`,
 				blob: await getArchiveBin(outDir, opts.format, containerId, entries, omni?.id)
 			},
-			() => api(state.account, uploader.agent, `${folder}${album ? '/'+album.slug : ''}/@${omni?.id || 'album'}/status`, { status: 4, albumVersion: album?.created })
+			...(opts.existingId ? [] : [() => api(state.account!, uploader.agent, `${folder}${album ? '/'+album.slug : ''}/@${omni?.id || 'album'}/status`, { status: 4, albumVersion: album?.created })])
 		]);
 	}
 

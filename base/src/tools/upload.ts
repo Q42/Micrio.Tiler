@@ -37,7 +37,7 @@ export async function upload(
 		setStatus?: (id:string, data:{status:number;width?:number;height?:number;format?:FormatType;length?:number}) => void|Promise<void>;
 		/** Signed upload URL provider */
 		getUploadUrls?: (files:string[]) => Promise<string[]>;
-		/** Render PDF pages in a worker thread (default: when getUploadUrls is set) */
+		/** Render PDF pages in a worker thread (default: true) */
 		pdfWorker?: boolean;
 		/** PDF display name for page titles */
 		pdfName?: string;
@@ -155,19 +155,27 @@ export async function upload(
 		state?.log(`Parsing PDF file ${f}...`);
 
 		const scale = parseInt(opts.pdfScale ? opts.pdfScale.toString() : '4');
-		// Server-side tilers (signed upload URLs) render in a worker, off the event loop;
-		// the CLI/GUI renders in-process. Both release each page's native memory.
-		const useWorker = (opts.pdfWorker ?? !!opts.getUploadUrls) && !!opts.existingId;
-		let pageCount:number;
+		// Render off the event loop by default. If worker threads are unavailable (e.g. an
+		// older packaged app), fall back to the in-process renderer below.
+		const useWorker = opts.pdfWorker ?? true;
+		let pageCount:number = 0;
 		let renderWorker:PdfRenderWorker|undefined;
 		let renderer:PdfRenderer|undefined;
 		if(useWorker) {
-			renderWorker = new PdfRenderWorker(f, scale);
-			pageCount = await renderWorker.ready.catch(async e => {
-				await renderWorker!.terminate();
-				throw new Error(`PDF reading error: ${e?.message ?? e}`);
-			});
-		} else {
+			try {
+				renderWorker = new PdfRenderWorker(f, scale);
+				pageCount = await renderWorker.ready;
+			} catch(e:any) {
+				if(String(e?.message).startsWith('PDF reading error')) {
+					await renderWorker?.terminate();
+					throw e;
+				}
+				await renderWorker?.terminate();
+				renderWorker = undefined;
+				state.log?.(`PDF worker unavailable (${e?.message ?? e}); rendering in-process`);
+			}
+		}
+		if(!renderWorker) {
 			renderer = await PdfRenderer.open(f, scale);
 			pageCount = renderer.pages;
 		}
